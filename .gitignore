@@ -1,0 +1,43 @@
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build and Distribution
+dist/
+out/
+build/
+
+# Testing
+test-results/
+coverage/
+
+# Antigravity/AI Tooling and Artifacts
+.agent/
+.gemini/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Operating System
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+data/
+node_modules
+config.json
+
+# Artifacts / personal config
+undefined.yaml
+electron-distribution.md
+

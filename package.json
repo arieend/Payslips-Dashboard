@@ -1,0 +1,64 @@
+{
+  "name": "payslip-infographic",
+  "version": "1.2.0",
+  "author": "ArieE",
+  "description": "Interactive infographic for payslip data analysis",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "ingest": "node scripts/ingest.js",
+    "dev": "node server.js",
+    "build": "electron-builder",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test test/e2e"
+  },
+  "build": {
+    "appId": "com.ariee.payslip-infographic",
+    "productName": "Payslip Dashboard",
+    "files": [
+      "**/*",
+      "!test/**/*",
+      "!test-results/**/*",
+      "!data/**/*",
+      "!*.yaml",
+      "!config.js"
+    ],
+    "extraResources": [
+      "heb.traineddata",
+      "eng.traineddata"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/tesseract.js/**/*",
+      "**/node_modules/pdf-parse/**/*"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "favicon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "favicon.png"
+    }
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "express": "^5.2.1",
+    "fs-extra": "^11.3.4",
+    "js-yaml": "^4.1.1",
+    "pdf-parse": "^1.1.1",
+    "tesseract.js": "^4.1.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.41.2",
+    "electron": "^41.1.1",
+    "electron-builder": "^26.8.1",
+    "electron-packager": "^17.1.2",
+    "jsdom": "^24.0.0",
+    "pdf-to-png-converter": "^3.14.0",
+    "pdfkit": "^0.18.0",
+    "vitest": "^1.2.0"
+  }
+}
