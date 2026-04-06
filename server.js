@@ -1,0 +1,128 @@
+const express = require('express');
+const path = require('path');
+const fs = require('fs-extra');
+const yaml = require('js-yaml');
+const { productName } = require('./package.json');
+const { ingest } = require('./scripts/ingest');
+
+const app = express();
+const PORT = 3000;
+
+// SSE clients for streaming ingest progress to the browser
+const sseClients = new Set();
+function broadcastProgress(data) {
+    if (sseClients.size === 0) return;
+    const msg = `data: ${JSON.stringify(data)}\n\n`;
+    sseClients.forEach(client => { try { client.write(msg); } catch (e) {} });
+}
+
+app.use(express.json());
+
+// Helper for absolute path resolution
+const resolvePath = (p) => path.isAbsolute(p) ? p : path.resolve(__dirname, p);
+
+// Cache-Control for fast refresh
+app.use((req, res, next) => {
+    // Disable caching for development
+    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    next();
+});
+
+app.use(express.static(path.join(__dirname, '.')));
+
+// SSE endpoint — browser subscribes here to receive live ingest progress
+app.get('/api/ingest-progress', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+    });
+    res.write('data: {"type":"connected"}\n\n');
+    sseClients.add(res);
+    req.on('close', () => sseClients.delete(res));
+});
+
+// Server-side ingestion endpoint — responds immediately, streams progress via SSE
+app.post('/api/ingest', (req, res) => {
+    const { year, month } = req.body || {};
+    console.log('[Server] Ingestion request received...', year ? `year=${year}` : '', month ? `month=${month}` : '');
+    res.json({ success: true });
+    broadcastProgress({ type: 'start' });
+    ingest(null, (progress) => broadcastProgress(progress), { forceYear: year, forceMonth: month })
+        .then(result => {
+            console.log(`[Server] Ingested ${result.count} items.`);
+            broadcastProgress({ type: 'done', count: result.count });
+        })
+        .catch(error => {
+            console.error('[Server] Ingestion error:', error);
+            broadcastProgress({ type: 'error', error: error.message });
+        });
+});
+
+const CONFIG_PATH = path.join(__dirname, `${productName}.yaml`);
+
+// Endpoint to update configuration from browser
+app.post('/api/config', async (req, res) => {
+    const { parentDirectoryPath } = req.body;
+    console.log('[Server] Updating config to:', parentDirectoryPath);
+    try {
+        await fs.writeFile(CONFIG_PATH, yaml.dump({ parentDirectoryPath }));
+
+        // Re-setup the proxy on the fly
+        if (parentDirectoryPath && fs.existsSync(parentDirectoryPath)) {
+            // Note: express-static doesn't easily 'detach', but adding a new use often works for simple dev
+            app.use('/payslips_source', express.static(parentDirectoryPath));
+        }
+
+        // Run ingestion in background — respond immediately so the UI isn't blocked
+        res.json({ success: true });
+        broadcastProgress({ type: 'start' });
+        ingest(parentDirectoryPath, (progress) => broadcastProgress(progress))
+            .then(result => broadcastProgress({ type: 'done', count: result.count }))
+            .catch(e => {
+                console.error('[Server] Background ingest error:', e);
+                broadcastProgress({ type: 'error', error: e.message });
+            });
+    } catch (error) {
+        console.error('[Server] Config update error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Serve a source file by absolute path (validated against configured source dir)
+app.get('/api/source-file', (req, res) => {
+    try {
+        const filePath = req.query.path;
+        if (!filePath) return res.status(400).end();
+        const config = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8')) || {};
+        const sourceDir = (config.parentDirectoryPath || '').replace(/\\/g, '/');
+        const normalizedPath = filePath.replace(/\\/g, '/');
+        if (!sourceDir || !normalizedPath.toLowerCase().startsWith(sourceDir.toLowerCase())) {
+            return res.status(403).end();
+        }
+        res.sendFile(filePath);
+    } catch (e) {
+        res.status(500).end();
+    }
+});
+
+// Setup payslips_source proxy
+try {
+    const config = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8')) || {};
+    if (config.parentDirectoryPath && fs.existsSync(config.parentDirectoryPath)) {
+        app.use('/payslips_source', express.static(config.parentDirectoryPath));
+        console.log('[Server] Proxying /payslips_source to:', config.parentDirectoryPath);
+    } else {
+        console.warn('[Server] Invalid source path in config:', config.parentDirectoryPath);
+    }
+} catch (e) {
+    console.warn('[Server] Could not setup payslips_source proxy:', e.message);
+}
+
+app.listen(PORT, () => {
+    console.log(`\n🚀 Payslip Dashboard running at http://localhost:${PORT}`);
+    console.log(`📡 Ingestion API: http://localhost:${PORT}/api/ingest`);
+    console.log('Press Ctrl+C to stop.\n');
+});
