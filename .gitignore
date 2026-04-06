@@ -17,6 +17,8 @@ coverage/
 # Antigravity/AI Tooling and Artifacts
 .agent/
 .gemini/
+.claude/
+.playwright-mcp/
 
 # IDEs and Editors
 .vscode/
