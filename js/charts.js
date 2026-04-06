@@ -1,21 +1,37 @@
 const ChartManager = {
     charts: {},
 
-    initCharts(yearData, totals) {
-        const mainSalaryCtx = document.getElementById('mainSalaryChart').getContext('2d');
-        const earningsPieCtx = document.getElementById('earningsPie').getContext('2d');
-        const deductionsPieCtx = document.getElementById('deductionsPie').getContext('2d');
-
-        this._createMainSalaryChart(mainSalaryCtx, yearData);
-        this._createEarningsPie(earningsPieCtx, totals);
-        this._createDeductionsPie(deductionsPieCtx, totals);
-    },
-
+    // Update yearly charts in-place if they exist, create them if not.
     updateCharts(yearData, totals) {
-        Object.values(this.charts).forEach(chart => {
-            if (chart) chart.destroy();
+        const labels = yearData.map(d => {
+            if (!d.month || !/^\d{4}-\d{2}$/.test(d.month)) return '?';
+            const date = new Date(d.month + '-01');
+            return isNaN(date.getTime()) ? '?' : date.toLocaleString('default', { month: 'short' });
         });
-        this.initCharts(yearData, totals);
+
+        if (this.charts.salary) {
+            this.charts.salary.data.labels = labels;
+            this.charts.salary.data.datasets[0].data = yearData.map(d => d.gross);
+            this.charts.salary.data.datasets[1].data = yearData.map(d => d.net);
+            this.charts.salary.data.datasets[2].data = yearData.map(d => d.deductions.tax + d.deductions.pension + d.deductions.insurance);
+            this.charts.salary.update('none');
+        } else {
+            this._createMainSalaryChart(document.getElementById('mainSalaryChart').getContext('2d'), yearData);
+        }
+
+        if (this.charts.earnings) {
+            this.charts.earnings.data.datasets[0].data = [totals.base, totals.bonus, totals.overtime];
+            this.charts.earnings.update('none');
+        } else {
+            this._createEarningsPie(document.getElementById('earningsPie').getContext('2d'), totals);
+        }
+
+        if (this.charts.deductions) {
+            this.charts.deductions.data.datasets[0].data = [totals.tax, totals.pension, totals.insurance];
+            this.charts.deductions.update('none');
+        } else {
+            this._createDeductionsPie(document.getElementById('deductionsPie').getContext('2d'), totals);
+        }
     },
 
     _getColor(varName) {
@@ -24,14 +40,11 @@ const ChartManager = {
 
     _createMainSalaryChart(ctx, yearData) {
         const labels = yearData.map(d => {
-            if (!d.month || !/^\d{4}-\d{2}$/.test(d.month)) {
-                console.warn('[ChartManager] Invalid month format:', d.month);
-                return '?';
-            }
+            if (!d.month || !/^\d{4}-\d{2}$/.test(d.month)) return '?';
             const date = new Date(d.month + '-01');
             return isNaN(date.getTime()) ? '?' : date.toLocaleString('default', { month: 'short' });
         });
-        
+
         this.charts.salary = new Chart(ctx, {
             type: 'bar',
             data: {
@@ -61,8 +74,10 @@ const ChartManager = {
                 ]
             },
             options: {
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                resizeDelay: 100,
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -75,11 +90,11 @@ const ChartManager = {
                     }
                 },
                 plugins: {
-                    legend: { 
-                        display: true, 
-                        position: 'top', 
-                        align: 'end', 
-                        labels: { usePointStyle: true, boxWidth: 6, color: this._getColor('--text-primary'), font: { family: 'Inter', size: 10 } } 
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: { usePointStyle: true, boxWidth: 6, color: this._getColor('--text-primary'), font: { family: 'Inter', size: 10 } }
                     },
                     tooltip: {
                         backgroundColor: this._getColor('--bg-header'),
@@ -119,13 +134,15 @@ const ChartManager = {
                 }]
             },
             options: {
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                resizeDelay: 100,
                 cutout: '70%',
                 plugins: {
-                    legend: { 
-                        position: 'bottom', 
-                        labels: { usePointStyle: true, color: this._getColor('--text-primary'), font: { family: 'Inter', size: 11 } } 
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, color: this._getColor('--text-primary'), font: { family: 'Inter', size: 11 } }
                     }
                 }
             }
@@ -145,34 +162,47 @@ const ChartManager = {
                 }]
             },
             options: {
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                resizeDelay: 100,
                 plugins: {
-                    legend: { 
-                        position: 'bottom', 
-                        labels: { usePointStyle: true, color: this._getColor('--text-primary'), font: { family: 'Inter', size: 11 } } 
+                    legend: {
+                        position: 'bottom',
+                        labels: { usePointStyle: true, color: this._getColor('--text-primary'), font: { family: 'Inter', size: 11 } }
                     }
                 }
             }
         });
     },
 
+    // Update summary charts in-place if they exist, create them if not.
     initAllYearsCharts(summaryData, lifetimeTotals) {
-        // Clear previous instances to prevent memory leaks/loops
-        ['growth', 'lifetimeComp', 'trendline'].forEach(key => {
-            if (this.charts[key]) {
-                try { this.charts[key].destroy(); } catch (e) { console.warn(`[ChartManager] Failed to destroy ${key} chart:`, e); }
-                this.charts[key] = null;
-            }
-        });
+        const sortedData = [...summaryData].sort((a, b) => a.year - b.year);
 
-        const growthCtx = document.getElementById('yoyGrowthChart').getContext('2d');
-        const compositionCtx = document.getElementById('lifetimeCompositionChart').getContext('2d');
-        const trendlineCtx = document.getElementById('avgTrendlineChart').getContext('2d');
+        if (this.charts.growth) {
+            this.charts.growth.data.labels = sortedData.map(d => d.year);
+            this.charts.growth.data.datasets[0].data = sortedData.map(d => d.totalGross);
+            this.charts.growth.data.datasets[1].data = sortedData.map(d => d.totalNet);
+            this.charts.growth.update('none');
+        } else {
+            this._createYoYGrowthChart(document.getElementById('yoyGrowthChart').getContext('2d'), summaryData);
+        }
 
-        this._createYoYGrowthChart(growthCtx, summaryData);
-        this._createLifetimeCompositionChart(compositionCtx, lifetimeTotals);
-        this._createAvgTrendlineChart(trendlineCtx, summaryData);
+        if (this.charts.lifetimeComp) {
+            this.charts.lifetimeComp.data.datasets[0].data = [lifetimeTotals.net, lifetimeTotals.deductions];
+            this.charts.lifetimeComp.update('none');
+        } else {
+            this._createLifetimeCompositionChart(document.getElementById('lifetimeCompositionChart').getContext('2d'), lifetimeTotals);
+        }
+
+        if (this.charts.trendline) {
+            this.charts.trendline.data.labels = sortedData.map(d => d.year);
+            this.charts.trendline.data.datasets[0].data = sortedData.map(d => d.avgMonthly);
+            this.charts.trendline.update('none');
+        } else {
+            this._createAvgTrendlineChart(document.getElementById('avgTrendlineChart').getContext('2d'), summaryData);
+        }
     },
 
     _createYoYGrowthChart(ctx, summaryData) {
@@ -197,8 +227,10 @@ const ChartManager = {
                 ]
             },
             options: {
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                resizeDelay: 100,
                 plugins: {
                     legend: { position: 'top', align: 'end', labels: { usePointStyle: true, boxWidth: 6, font: { size: 10 } } }
                 }
@@ -218,8 +250,10 @@ const ChartManager = {
                 }]
             },
             options: {
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                resizeDelay: 100,
                 cutout: '70%',
                 plugins: {
                     legend: { position: 'right', labels: { usePointStyle: true, font: { size: 11 } } }
@@ -246,8 +280,10 @@ const ChartManager = {
                 }]
             },
             options: {
+                animation: false,
                 responsive: true,
                 maintainAspectRatio: false,
+                resizeDelay: 100,
                 scales: {
                     x: { display: false },
                     y: { display: true, ticks: { display: false }, grid: { display: false } }

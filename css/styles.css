@@ -194,7 +194,7 @@ input:checked + .slider:before { transform: translateX(24px); }
     display: grid;
     grid-template-columns: 2fr 1.2fr;
     gap: 2rem;
-    height: 500px;
+    grid-auto-rows: 500px;
 }
 
 .viz-card {
@@ -216,6 +216,7 @@ input:checked + .slider:before { transform: translateX(24px); }
 .chart-container {
     height: calc(100% - 4rem);
     width: 100%;
+    position: relative;
 }
 
 .pie-group { 
@@ -643,6 +644,7 @@ input:checked + .slider:before { transform: translateX(24px); }
 
 .combo-comparison .pie-container {
     height: 180px;
+    position: relative;
 }
 
 .trendline-container {

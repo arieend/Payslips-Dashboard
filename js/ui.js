@@ -100,7 +100,8 @@ const UIManager = {
     },
     _getPdfUrl(absolutePath) {
         if (!absolutePath) return null;
-        // Browser dev mode: serve via dedicated endpoint (no APP_CONFIG dependency)
+        if (window.electron) return null; // Electron: IPC blob URL is used instead (see showMonthDetails)
+        // Browser dev mode: serve via dedicated endpoint
         return '/api/source-file?path=' + encodeURIComponent(absolutePath);
     },
     showMonthDetails(monthData, showParsed = true) {
