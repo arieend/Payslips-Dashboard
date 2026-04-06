@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install          # Install dependencies
 npm start            # Run as Electron desktop app
 npm run dev          # Run as browser app via Express on localhost:3000
-npm run ingest       # Run ingestion pipeline from CLI (reads config.json for source path)
+npm run ingest       # Run ingestion pipeline from CLI (reads {appName}.yaml for source path)
 npm run build        # Build portable Windows EXE (output: dist/)
 
 npm test             # Run unit tests (Vitest, jsdom environment)
@@ -51,7 +51,7 @@ Ingestion is incremental: files are cached by `mtime`. OCR (Hebrew + English) is
 
 ### Portable App Path Logic
 
-When running as a portable EXE, `process.env.PORTABLE_EXECUTABLE_DIR` is set. `main.js` uses this as `baseDir` for `config.json` and `data/` so user data lives next to the executable, not inside the ASAR bundle.
+When running as a portable EXE, `process.env.PORTABLE_EXECUTABLE_DIR` is set. `main.js` uses this as `baseDir` for `{appName}.yaml` and `data/` so user data lives next to the executable, not inside the ASAR bundle.
 
 ### Data Schema
 
@@ -76,7 +76,7 @@ Month is derived from PDF text first (Hebrew and English month names supported),
 
 ### Configuration
 
-`config.json` (at `baseDir`) holds `{ "parentDirectoryPath": "..." }`. In Electron it is written via IPC handlers; in dev mode via `POST /api/config`. The frontend reads it from `data/config.js` as `window.APP_CONFIG`.
+`{appName}.yaml` (e.g. `Payslip Dashboard.yaml`, at `baseDir`) holds `{ parentDirectoryPath: "..." }`. Writes are atomic to prevent corruption. In Electron it is written via IPC handlers; in dev mode via `POST /api/config`. The frontend reads it from `data/config.js` as `window.APP_CONFIG`.
 
 ### Testing Layout
 

@@ -5,14 +5,20 @@ The Payslip Infographic Generator uses a multi-layered testing strategy to ensur
 ## Test Layers
 
 ### Unit Tests (Vitest)
-Located in `test/unit/data.test.js`.
-- **Scope**: Core logic of `DataManager`.
-- **Key Tests**:
-  - `getYears()`: Verifies year extraction from ingested data.
-  - `getTotals()`: Ensures cumulative earnings and deductions are calculated correctly.
-  - `getAverages()`: Checks monthly average net income accuracy.
-  - `getInsights()`: Tests the anomaly detection engine for gross spikes and incomplete datasets.
-  - `getTrendAnalysis()`: Validates highest/lowest month identification and MoM change calculations.
+Located in `test/unit/`.
+
+| File | Scope |
+|------|-------|
+| `data.test.js` | `DataManager` — `getYears()`, `getTotals()`, `getAverages()`, `getInsights()`, `getTrendAnalysis()` |
+| `app.test.js` | `App` — wiring of DataManager → ChartManager → UIManager, first-run logic |
+| `charts.test.js` | `ChartManager` — Chart.js instance creation and update lifecycle |
+| `ui.test.js` | `UIManager` — DOM state, theme switching, modal open/close, year selector |
+| `ingest.test.js` | Ingestion pipeline — PDF parsing, OCR fallback, month detection, incremental caching |
+
+To run a single file:
+```bash
+npx vitest run test/unit/data.test.js
+```
 
 ### End-to-End Tests (Playwright)
 Located in `test/e2e/e2e.spec.js`.
