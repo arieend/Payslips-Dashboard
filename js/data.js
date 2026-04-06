@@ -181,13 +181,15 @@ const DataManager = {
             const yearData = this.getDataForYear(year);
             if (yearData.length > 0) {
                 const totals = this.getTotals(yearData);
+                const failedCount = yearData.filter(m => m.gross === 0 && m.net === 0).length;
                 summary.push({
                     year,
                     totalGross: totals.gross,
                     totalNet: totals.net,
                     totalDeductions: totals.deductions,
                     avgMonthly: totals.net / yearData.length,
-                    monthsCount: yearData.length
+                    monthsCount: yearData.length,
+                    failedCount
                 });
             }
         });

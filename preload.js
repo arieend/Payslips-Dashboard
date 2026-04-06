@@ -20,4 +20,3 @@ const electronBridge = {
 };
 
 contextBridge.exposeInMainWorld('electron', electronBridge);
-contextBridge.exposeInMainWorld('IPCHandler', electronBridge);

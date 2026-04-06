@@ -289,6 +289,16 @@ input:checked + .slider:before { transform: translateX(24px); }
     border-color: var(--blue);
 }
 
+.month-card.parse-failed {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.5), 0 4px 16px rgba(239, 68, 68, 0.25);
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.month-card.parse-failed:hover {
+    box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.7), 0 10px 20px rgba(239, 68, 68, 0.3);
+    border-color: rgba(239, 68, 68, 0.7);
+}
+
 .month-card .card-title {
     display: flex;
     align-items: center;

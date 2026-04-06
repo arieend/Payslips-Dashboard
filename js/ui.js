@@ -69,7 +69,8 @@ const UIManager = {
 
         yearData.forEach(month => {
             const card = document.createElement('div');
-            card.className = 'month-card';
+            const isFailed = month.gross === 0 && month.net === 0;
+            card.className = 'month-card' + (isFailed ? ' parse-failed' : '');
             card.innerHTML = `
                 <div class="card-title">
                     <i data-lucide="calendar"></i>
@@ -321,10 +322,15 @@ const UIManager = {
             grid.innerHTML = summaryData.map(item => {
                 const year = parseInt(item.year) || 0;
                 const months = parseInt(item.monthsCount) || 0;
+                const failed = parseInt(item.failedCount) || 0;
                 const totalGross = Number(item.totalGross) || 0;
                 const totalNet = Number(item.totalNet) || 0;
+                const failRatio = months > 0 ? failed / months : 0;
+                const shadowStyle = failRatio > 0
+                    ? ` style="box-shadow: 0 0 0 2px rgba(239,68,68,${(failRatio * 0.6 + 0.2).toFixed(2)}), 0 4px 16px rgba(239,68,68,${(failRatio * 0.35).toFixed(2)});"`
+                    : '';
                 return `
-                <div class="year-card" data-year="${year}">
+                <div class="year-card" data-year="${year}"${shadowStyle}>
                     <div class="card-header">
                         <span class="year-label">${year}</span>
                         <div style="display:flex;align-items:center;gap:0.5rem;">
