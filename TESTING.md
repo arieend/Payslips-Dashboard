@@ -1,50 +1,55 @@
 # Testing Strategy
 
-The Payslip Infographic Generator uses a multi-layered testing strategy to ensuring 100% functionality and data accuracy.
+The Payslip Dashboard uses a multi-layered testing approach: unit tests for logic correctness and E2E tests for full UI flows.
 
 ## Test Layers
 
-### Unit Tests (Vitest)
+### Unit Tests (Vitest + JSDOM)
+
 Located in `test/unit/`.
 
 | File | Scope |
 |------|-------|
-| `data.test.js` | `DataManager` — `getYears()`, `getTotals()`, `getAverages()`, `getInsights()`, `getTrendAnalysis()` |
-| `app.test.js` | `App` — wiring of DataManager → ChartManager → UIManager, first-run logic |
+| `data.test.js` | `DataManager` — `load()`, `getYears()`, `getDataForYear()`, `getTotals()`, `getAverages()`, `getInsights()`, `getTrendAnalysis()`, `getAllYearsSummary()`, `getLifetimeTotals()` |
+| `app.test.js` | `App` — wiring of DataManager → ChartManager → UIManager, first-run logic, SSE progress subscription |
 | `charts.test.js` | `ChartManager` — Chart.js instance creation and update lifecycle |
-| `ui.test.js` | `UIManager` — DOM state, theme switching, modal open/close, year selector |
-| `ingest.test.js` | Ingestion pipeline — PDF parsing, OCR fallback, month detection, incremental caching |
+| `ui.test.js` | `UIManager` — DOM state, theme switching, modal open/close, year selector, toast notifications, month grid rendering, manual edit modal |
+| `ipc-handler.test.js` | `IPCHandler` — `selectFolder()`, `updatePath()`, `syncNow()`, `syncYear()`, `syncMonth()`, `saveManualEdit()`, status/progress UI updates, browser REST fallback paths |
+| `i18n.test.js` | `I18n` — translation lookup (`t()`), variable interpolation, `setLang()`, RTL direction application, `apply()` DOM mutations, `formatMonth()` |
+| `ingest.test.js` | Ingestion pipeline — PDF parsing, OCR fallback, Hebrew/English month detection, incremental caching, `forceYear`/`forceMonth` scoping |
 
-To run a single file:
+Run a single file:
 ```bash
 npx vitest run test/unit/data.test.js
 ```
 
 ### End-to-End Tests (Playwright)
-Located in `test/e2e/e2e.spec.js`.
-- **Scope**: Frontend interactions, UI state, and visual elements.
-- **Key Tests**:
-  - Dashboard initialization and title verification.
-  - KPI card population with non-zero values.
-  - Visibility and content of the Trend Analysis section.
-  - Dynamic generation of the 12-month drilldown grid.
-  - Modal opening/closing for monthly detailed views.
-  - Theme switching (Light/Dark mode) and its application to the DOM.
-  - Year selection and subsequent data updates.
 
-## How to Run Tests
+Located in `test/e2e/e2e.spec.js`. The dev server (`npm run dev`) must be running (the test runner starts it automatically via `webServer` config).
 
-### Standard Unit Tests
+| Test area | What is verified |
+|-----------|-----------------|
+| Initialization | Dashboard title, KPI cards populated with non-zero values |
+| Trend section | Visibility and content of highest/lowest/volatility rows |
+| Month grid | Dynamic 12-card grid generation |
+| Modals | Monthly drilldown opens and closes correctly |
+| Theme switching | Light/Dark toggle applies correct class to `<html>` |
+| Year selection | Year dropdown updates displayed data |
+
+## How to Run
+
 ```bash
-npm run test
-```
+# All unit tests
+npm test
 
-### E2E Tests
-Requires Playwright browsers to be installed.
-```bash
+# Unit tests in watch mode
+npm run test:watch
+
+# E2E tests (install browsers once first)
 npx playwright install chromium
 npm run test:e2e
 ```
 
 ## Coverage Goal
-The goal is to provide 100% code coverage for the `DataManager` logic and full coverage of the primary user journey (Loading, Filtering, Detailed View, Theme Toggle).
+
+Full coverage of `DataManager` logic and the primary user journey: data loading → year/month filtering → monthly drilldown modal → manual edit → theme toggle.

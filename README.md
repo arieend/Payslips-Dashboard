@@ -1,66 +1,83 @@
-# Payslip Infographic Generator
+# Payslip Dashboard
 
-A premium dashboard for visualizing and analyzing yearly payslip data. This application processes your salary documents and highlights trends, anomalies, and detailed monthly breakdowns.
+A premium desktop dashboard for visualizing and analyzing yearly payslip data. Processes salary documents and surfaces trends, anomalies, and detailed monthly breakdowns — with full Hebrew/English localization.
 
 ## Features
-- **Data Ingestion**: Automatically parses payslips from sorted directories (Year > Months) with incremental caching.
+
+- **Data Ingestion**: Parses payslips from year-organized directories with incremental caching (skips unchanged files).
 - **OCR Fallback**: Tesseract.js OCR with automatic rotation detection for scanned PDFs; supports Hebrew and English text.
-- **Interactive Visuals**: Beautiful charts using Chart.js to show salary trends and composition.
-- **Anomaly Detection**: Identifies spikes in earnings or missing files.
-- **Live Sync**: Chokidar file watcher re-ingests data automatically when source files change.
-- **Premium Design**: Modern Glassmorphism UI with Light/Dark mode support.
-- **Export**: Options to export your financial overview as PDF/PNG.
-- **Portable App**: Fully standalone Electron application for easy distribution.
-
-## Distribution
-
-### Windows Portable App
-The latest release can be built using:
-```bash
-npm run build
-```
-This generates a standalone `Payslip Dashboard 1.2.0.exe` in the `dist/` directory.
-
-### Initial Setup
-1. Launch the application.
-2. Click the **Settings Gear** (top right) to configure your source directory.
-3. Click **Browse** to select the folder containing your PDF/TXT payslips.
-4. The dashboard will automatically ingest and display your data.
+- **Interactive Charts**: Chart.js visualizations — monthly salary, year-over-year growth, and composition breakdowns.
+- **Anomaly Detection**: Flags gross spikes (>30% above average) and significant month-over-month net changes (>20%).
+- **Lifetime Summary**: Aggregated view across all years with career totals and per-year metrics.
+- **Manual Data Editing**: In-app modal to correct parsed values for any month and persist changes to `payslips.json`.
+- **Live Sync**: Chokidar file watcher re-ingests automatically when source files change (3-second settle delay).
+- **Internationalization**: Full UI in English and Hebrew (RTL support), persisted via `localStorage`.
+- **Light / Dark Mode**: Theme switching with CSS variable-driven Glassmorphism design.
+- **Export**: PDF and PNG export of the current dashboard view.
+- **Portable App**: Standalone Electron EXE — no Node.js required for end users.
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js installed
+
+- Node.js (for development)
 
 ### Installation
-1. Clone the repository.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
 
-### Usage
-1. Place your payslips in the source directory you configure via the app's Settings (organized by year folders).
-2. Run the ingestion script:
-   ```bash
-   npm run ingest
-   ```
-3. Open `index.html` in your browser. Or run a local server:
-   ```bash
-   npm run dev
-   ```
+```bash
+git clone <repo>
+cd "Payslips Dashboard"
+npm install
+```
+
+### Running
+
+```bash
+npm start          # Electron desktop app
+npm run dev        # Browser dev server at localhost:3000
+npm run ingest     # CLI ingestion pipeline (reads {appName}.yaml for source path)
+```
+
+### First-Time Setup
+
+1. Launch the app (`npm start` or the built EXE).
+2. On first run, the Settings panel opens automatically.
+3. Click **Browse** to select the folder containing your PDF payslips.
+4. The folder must be organized as `<Year>/<YYYYMM>.pdf` (e.g., `2024/202403.pdf`).
+5. The dashboard ingests and displays your data automatically.
+
+## Building for Distribution
+
+```bash
+npm run build
+```
+
+Outputs a standalone `Payslip Dashboard 1.2.0.exe` to `dist/`. The EXE is portable — `{appName}.yaml` and `data/` are stored next to the executable.
 
 ## Testing
-The project includes both unit and end-to-end tests:
-- **Unit Tests**: `npm run test` (via Vitest)
-- **E2E Tests**: `npm run test:e2e` (via Playwright)
+
+```bash
+npm test               # Unit tests (Vitest)
+npm run test:watch     # Watch mode
+npm run test:e2e       # E2E tests (requires: npx playwright install chromium)
+```
+
+Run a single unit test file:
+```bash
+npx vitest run test/unit/data.test.js
+```
 
 ## Tech Stack
-- Frontend: Vanilla JS, CSS, HTML5
-- Desktop: Electron, electron-builder
-- Charts: Chart.js
-- Icons: Lucide
-- Testing: Vitest, Playwright, JSDOM
-- Ingestion: Node.js, fs-extra, pdf-parse, Tesseract.js, js-yaml
-- File Watching: chokidar
-- Build: electron-builder (portable Windows EXE)
+
+| Layer | Technology |
+|-------|-----------|
+| Desktop shell | Electron, electron-builder |
+| Frontend | Vanilla JS, CSS, HTML5 |
+| Internationalization | Custom `I18n` module (EN + HE) |
+| Charts | Chart.js |
+| Icons | Lucide |
+| Ingestion | pdf-parse, Tesseract.js, js-yaml, fs-extra |
+| File watching | chokidar |
+| Dev server | Express |
+| Testing | Vitest, Playwright, JSDOM |
+| Build | electron-builder (portable Windows EXE) |
