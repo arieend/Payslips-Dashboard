@@ -531,7 +531,7 @@ function extractDataFromText(text) {
         }
     }
 
-    // 5. Net fallback for phone-camera format: "שכר נטו X,XXX.XX" (OCR may garble ט→שׁ)
+    // 4. Net fallback for phone-camera format: "שכר נטו X,XXX.XX" (OCR may garble ט→שׁ)
     if (data.net === 0) {
         lines.forEach(line => {
             if (data.net > 0) return;
@@ -544,7 +544,7 @@ function extractDataFromText(text) {
         });
     }
 
-    // 6. Safety-net agorot normalization: if a deduction still exceeds a plausible
+    // 5. Safety-net agorot normalization: if a deduction still exceeds a plausible
     //    fraction of gross after all above, scale it down by 100.
     if (data.gross > 0) {
         if (data.deductions.tax > data.gross * 0.9)
@@ -555,7 +555,7 @@ function extractDataFromText(text) {
             data.deductions.pension = Math.round(data.deductions.pension / 100);
     }
 
-    // 7. Estimate net from gross − known deductions when net is still unknown
+    // 6. Estimate net from gross − known deductions when net is still unknown
     if (data.net === 0 && data.gross > 0) {
         const sumDed = data.deductions.tax + data.deductions.pension + data.deductions.insurance;
         if (sumDed > 0 && sumDed < data.gross * 0.8) {

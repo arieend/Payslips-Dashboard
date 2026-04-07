@@ -210,7 +210,15 @@ ipcMain.handle('update-path', async (event, newPath) => {
 });
 
 ipcMain.handle('read-file-base64', async (event, filePath) => {
-  const data = await fs.readFile(filePath);
+  const config = await readConfig().catch(() => ({}));
+  const sourceDir = config.parentDirectoryPath;
+  if (!sourceDir) throw new Error('Access denied');
+  const resolved = path.resolve(filePath);
+  const resolvedSource = path.resolve(sourceDir);
+  if (resolved !== resolvedSource && !resolved.startsWith(resolvedSource + path.sep)) {
+    throw new Error('Access denied');
+  }
+  const data = await fs.readFile(resolved);
   return data.toString('base64');
 });
 

@@ -90,10 +90,11 @@ const DataManager = {
     },
 
     getAverages(yearData) {
-        if (yearData.length === 0) return { net: 0 };
-        const totals = this.getTotals(yearData);
+        const valid = yearData.filter(d => d.gross > 0 || d.net > 0);
+        if (valid.length === 0) return { net: 0 };
+        const totals = this.getTotals(valid);
         return {
-            net: totals.net / yearData.length
+            net: totals.net / valid.length
         };
     },
 
@@ -182,12 +183,13 @@ const DataManager = {
             if (yearData.length > 0) {
                 const totals = this.getTotals(yearData);
                 const failedCount = yearData.filter(m => m.gross === 0 && m.net === 0).length;
+                const validCount = yearData.length - failedCount || 1;
                 summary.push({
                     year,
                     totalGross: totals.gross,
                     totalNet: totals.net,
                     totalDeductions: totals.deductions,
-                    avgMonthly: totals.net / yearData.length,
+                    avgMonthly: totals.net / validCount,
                     monthsCount: yearData.length,
                     failedCount
                 });

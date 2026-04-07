@@ -99,7 +99,8 @@ app.get('/api/source-file', (req, res) => {
         const config = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8')) || {};
         const sourceDir = (config.parentDirectoryPath || '').replace(/\\/g, '/');
         const normalizedPath = filePath.replace(/\\/g, '/');
-        if (!sourceDir || !normalizedPath.toLowerCase().startsWith(sourceDir.toLowerCase())) {
+        const normalizedSource = sourceDir.endsWith('/') ? sourceDir : sourceDir + '/';
+        if (!sourceDir || !normalizedPath.toLowerCase().startsWith(normalizedSource.toLowerCase())) {
             return res.status(403).end();
         }
         res.sendFile(filePath);

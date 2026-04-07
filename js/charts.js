@@ -3,11 +3,7 @@ const ChartManager = {
 
     // Update yearly charts in-place if they exist, create them if not.
     updateCharts(yearData, totals) {
-        const labels = yearData.map(d => {
-            if (!d.month || !/^\d{4}-\d{2}$/.test(d.month)) return '?';
-            const date = new Date(d.month + '-01');
-            return isNaN(date.getTime()) ? '?' : date.toLocaleString('default', { month: 'short' });
-        });
+        const labels = this._monthLabels(yearData);
 
         if (this.charts.salary) {
             this.charts.salary.data.labels = labels;
@@ -34,16 +30,20 @@ const ChartManager = {
         }
     },
 
+    _monthLabels(yearData) {
+        return yearData.map(d => {
+            if (!d.month || !/^\d{4}-\d{2}$/.test(d.month)) return '?';
+            const date = new Date(d.month + '-01');
+            return isNaN(date.getTime()) ? '?' : date.toLocaleString('default', { month: 'short' });
+        });
+    },
+
     _getColor(varName) {
         return getComputedStyle(document.body).getPropertyValue(varName).trim() || '#666';
     },
 
     _createMainSalaryChart(ctx, yearData) {
-        const labels = yearData.map(d => {
-            if (!d.month || !/^\d{4}-\d{2}$/.test(d.month)) return '?';
-            const date = new Date(d.month + '-01');
-            return isNaN(date.getTime()) ? '?' : date.toLocaleString('default', { month: 'short' });
-        });
+        const labels = this._monthLabels(yearData);
 
         this.charts.salary = new Chart(ctx, {
             type: 'bar',

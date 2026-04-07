@@ -163,26 +163,15 @@ const App = {
                 this.render();
             },
             async (year, btn) => {
-                const icon = btn.querySelector('i, svg');
-                icon.classList.add('spinning');
-                const done = () => icon.classList.remove('spinning');
-                if (window.electron) {
-                    try { await window.IPCHandler.syncYear(year); } catch (e) { UIManager.showToast('Refresh failed: ' + e.message, 'alert-triangle'); }
-                    done();
-                } else {
-                    try { await window.IPCHandler.syncYear(year); } catch (e) { done(); UIManager.showToast('Refresh failed: ' + e.message, 'alert-triangle'); return; }
-                    this._subscribeToIngestProgress(done);
-                }
+                await this._syncWithProgress(btn, () => window.IPCHandler.syncYear(year));
             }
         );
             return;
         }
 
         UIManager.toggleView(false);
-        const year = this.currentYear || 'summary';
-        document.getElementById('mainTitle').innerHTML = year === 'summary' ? 
-            'Lifetime Payslip Summary' : 
-            `<span>${year}</span> Payslip Overview`;
+        const year = this.currentYear;
+        document.getElementById('mainTitle').innerHTML = `<span>${year}</span> Payslip Overview`;
             
         const filteredData = this.getFilteredData();
         if (!filteredData || filteredData.length === 0) {
@@ -201,16 +190,7 @@ const App = {
         UIManager.updateAnomalies(insights);
         UIManager.updateMonthGrid(filteredData, async (month, btn) => {
             const [year, mo] = month.month.split('-');
-            const icon = btn.querySelector('i, svg');
-            icon.classList.add('spinning');
-            const done = () => icon.classList.remove('spinning');
-            if (window.electron) {
-                try { await window.IPCHandler.syncMonth(year, mo); } catch (e) { UIManager.showToast('Refresh failed: ' + e.message, 'alert-triangle'); }
-                done();
-            } else {
-                try { await window.IPCHandler.syncMonth(year, mo); } catch (e) { done(); UIManager.showToast('Refresh failed: ' + e.message, 'alert-triangle'); return; }
-                this._subscribeToIngestProgress(done);
-            }
+            await this._syncWithProgress(btn, () => window.IPCHandler.syncMonth(year, mo));
         });
 
         // Update Charts
@@ -278,6 +258,22 @@ const App = {
             filteredData = filteredData.filter(d => d.month.includes(`-${monthFilterVal}`));
         }
         return filteredData;
+    },
+
+    // Spin a button's icon while syncFn runs; handle errors and SSE subscription uniformly.
+    async _syncWithProgress(btn, syncFn) {
+        const icon = btn.querySelector('i, svg');
+        icon.classList.add('spinning');
+        const done = () => icon.classList.remove('spinning');
+        try {
+            await syncFn();
+        } catch (e) {
+            done();
+            UIManager.showToast('Refresh failed: ' + e.message, 'alert-triangle');
+            return;
+        }
+        if (window.electron) done();
+        else this._subscribeToIngestProgress(done);
     },
 
     // Browser-mode only: subscribe to SSE ingest progress stream.

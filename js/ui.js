@@ -4,7 +4,6 @@ const UIManager = {
         if (!this._cache[id]) this._cache[id] = document.getElementById(id);
         return this._cache[id];
     },
-    _clearCache() { this._cache = {}; },
     refreshIcons() {
         if (window.lucide) lucide.createIcons();
     },
@@ -146,7 +145,7 @@ const UIManager = {
                          ${isPdf ? '<button id="toggleRaw" style="font-size:0.7rem; background:none; border:1px solid var(--border); padding:2px 8px; border-radius:4px; cursor:pointer;">Show Raw Text</button>' : ''}
                     </div>
                     <div id="pdfViewerFrame" style="flex:1; border:1px solid var(--border); border-radius:0.5rem; overflow:hidden; background:#525659; display:${isPdf ? 'block' : 'none'};">
-                        <iframe src="${pdfUrl || ''}" width="100%" height="100%" frameborder="0"></iframe>
+                        <iframe src="${pdfUrl || 'about:blank'}" width="100%" height="100%" frameborder="0"></iframe>
                     </div>
                     <pre class="raw-content" id="rawContentArea" style="flex:1; margin:0; display:${isPdf ? 'none' : 'block'};"></pre>
                 </div>
@@ -178,11 +177,11 @@ const UIManager = {
         if (showParsed) {
             body.querySelector('#detailGross').textContent = `₪${monthData.gross.toLocaleString()}`;
             body.querySelector('#detailNet').textContent = `₪${monthData.net.toLocaleString()}`;
-            const totalDeductions = monthData.total_deductions || (monthData.deductions.tax + monthData.deductions.pension + monthData.deductions.insurance);
+            const totalDeductions = monthData.total_deductions || ((monthData.deductions?.tax ?? 0) + (monthData.deductions?.pension ?? 0) + (monthData.deductions?.insurance ?? 0));
             body.querySelector('#detailDeductions').textContent = `₪${totalDeductions.toLocaleString()}`;
-            body.querySelector('#detailTax').textContent = `₪${monthData.deductions.tax.toLocaleString()}`;
-            body.querySelector('#detailPension').textContent = `₪${monthData.deductions.pension.toLocaleString()}`;
-            body.querySelector('#detailInsurance').textContent = `₪${monthData.deductions.insurance.toLocaleString()}`;
+            body.querySelector('#detailTax').textContent = `₪${(monthData.deductions?.tax ?? 0).toLocaleString()}`;
+            body.querySelector('#detailPension').textContent = `₪${(monthData.deductions?.pension ?? 0).toLocaleString()}`;
+            body.querySelector('#detailInsurance').textContent = `₪${(monthData.deductions?.insurance ?? 0).toLocaleString()}`;
         }
         
         body.querySelector('#rawContentArea').textContent = monthData.raw_text || 'Raw text not available.';

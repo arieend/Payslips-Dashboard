@@ -48,7 +48,7 @@ const IPCHandler = {
   },
 
   async updatePath(newPath) {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled) return { success: false };
     const result = await window.electron.updatePath(newPath);
     if (result.success) {
       console.log('Path updated via manual input:', result.path);
