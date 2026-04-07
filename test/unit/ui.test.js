@@ -10,6 +10,10 @@ describe('UIManager Logical Coverage', () => {
             <div id="drilldownModal" class="hidden">
                 <div id="modalBody"></div>
             </div>
+            <div id="editModal" class="hidden">
+                <h3 id="editModalTitle"></h3>
+                <div id="editModalBody"></div>
+            </div>
             <select id="yearSelect"></select>
             <h1 id="mainTitle"></h1>
             <div id="anomalies-list"></div>
@@ -83,10 +87,22 @@ describe('UIManager Logical Coverage', () => {
     });
 
     describe('Month Grid & Modal', () => {
-        it('updateMonthGrid(): should create month cards', () => {
+        it('updateMonthGrid(): should create month cards with Edit and Refresh buttons', () => {
             UIManager.updateMonthGrid([{ month: '2024-03', gross: 1000, net: 800, deductions: {tax:10,pension:5,insurance:5}, source_file: 'f.pdf' }]);
             const grid = document.getElementById('monthCards');
             expect(grid.children.length).toBe(1);
+            expect(grid.querySelector('.card-edit-btn')).not.toBeNull();
+            expect(grid.querySelector('.card-refresh-btn')).not.toBeNull();
+        });
+
+        it('updateMonthGrid(): should fire onMonthEdit when Edit button is clicked', () => {
+            const onEdit = vi.fn();
+            const monthData = { month: '2024-03', gross: 1000, net: 800, deductions: {}, source_file: 'f.pdf' };
+            UIManager.updateMonthGrid([monthData], null, onEdit);
+            const editBtn = document.querySelector('.card-edit-btn');
+            editBtn.click();
+            // showEditModal is called — the modal should be visible
+            expect(document.getElementById('editModal').classList.contains('hidden')).toBe(false);
         });
 
         it('showMonthDetails(): should fill modal with month data', () => {
@@ -105,6 +121,56 @@ describe('UIManager Logical Coverage', () => {
             const modal = document.getElementById('drilldownModal');
             modal.classList.remove('hidden');
             UIManager.closeModal();
+            expect(modal.classList.contains('hidden')).toBe(true);
+        });
+
+        it('showEditModal(): should open modal and pre-fill fields with month data', () => {
+            const monthData = {
+                month: '2024-03',
+                gross: 15000,
+                net: 12000,
+                total_deductions: 3000,
+                deductions: { tax: 1500, pension: 750, insurance: 750 }
+            };
+            UIManager.showEditModal(monthData, vi.fn());
+            const modal = document.getElementById('editModal');
+            expect(modal.classList.contains('hidden')).toBe(false);
+            expect(document.getElementById('editGross').value).toBe('15000');
+            expect(document.getElementById('editNet').value).toBe('12000');
+            expect(document.getElementById('editTax').value).toBe('1500');
+            expect(document.getElementById('editPension').value).toBe('750');
+            expect(document.getElementById('editInsurance').value).toBe('750');
+            expect(document.getElementById('editModalTitle').textContent).toContain('March');
+        });
+
+        it('showEditModal(): should call onSave with correct updates on Save click', async () => {
+            const onSave = vi.fn().mockResolvedValue(undefined);
+            const monthData = {
+                month: '2024-05',
+                gross: 10000,
+                net: 8000,
+                deductions: { tax: 1000, pension: 500, insurance: 500 }
+            };
+            UIManager.showEditModal(monthData, onSave);
+            document.getElementById('editGross').value = '11000';
+            document.getElementById('editNet').value = '9000';
+            document.getElementById('editTax').value = '1100';
+            document.getElementById('editPension').value = '550';
+            document.getElementById('editInsurance').value = '350';
+            document.getElementById('editModalSaveBtn').click();
+            await new Promise(r => setTimeout(r, 0)); // flush microtasks
+            expect(onSave).toHaveBeenCalledWith('2024-05', {
+                gross: 11000,
+                net: 9000,
+                total_deductions: 2000,
+                deductions: { tax: 1100, pension: 550, insurance: 350 }
+            });
+        });
+
+        it('closeEditModal(): should hide edit modal', () => {
+            const modal = document.getElementById('editModal');
+            modal.classList.remove('hidden');
+            UIManager.closeEditModal();
             expect(modal.classList.contains('hidden')).toBe(true);
         });
     });

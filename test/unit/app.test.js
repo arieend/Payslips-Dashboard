@@ -146,6 +146,46 @@ describe('App Orchestrator Logical Coverage', () => {
             expect(UIManager.showMonthDetails).toHaveBeenCalled();
         });
     });
+    describe('Manual Edit Integration', () => {
+        beforeEach(() => {
+            App.currentYear = "2024";
+            vi.mocked(DataManager.getDataForYear).mockReturnValue([
+                { month: '2024-03', gross: 15000, net: 12000, total_deductions: 3000, deductions: {} }
+            ]);
+            vi.mocked(DataManager.getTotals).mockReturnValue({ gross: 0, net: 0, deductions: 0 });
+            vi.mocked(DataManager.getAverages).mockReturnValue({ net: 0 });
+            ChartManager.charts = {
+                salary: { data: { datasets: [] }, update: vi.fn() }
+            };
+        });
+
+        it('render(): should pass an onMonthEdit callback as third arg to updateMonthGrid', () => {
+            App.render();
+            expect(UIManager.updateMonthGrid).toHaveBeenCalledWith(
+                expect.any(Array),
+                expect.any(Function),
+                expect.any(Function)
+            );
+        });
+
+        it('onMonthEdit callback: should call IPCHandler.saveManualEdit, show toast, and reload', async () => {
+            const mockSave = vi.fn().mockResolvedValue({ success: true });
+            const mockLoadData = vi.spyOn(App, 'loadData').mockResolvedValue(undefined);
+            global.IPCHandler = { saveManualEdit: mockSave };
+
+            App.render();
+
+            const onMonthEdit = vi.mocked(UIManager.updateMonthGrid).mock.calls.at(-1)[2];
+            await onMonthEdit('2024-03', { gross: 16000, net: 13000, total_deductions: 3000, deductions: {} });
+
+            expect(mockSave).toHaveBeenCalledWith('2024-03', expect.objectContaining({ gross: 16000 }));
+            expect(UIManager.showToast).toHaveBeenCalledWith('Data saved successfully!', 'check-circle');
+            expect(mockLoadData).toHaveBeenCalled();
+
+            mockLoadData.mockRestore();
+        });
+    });
+
     describe('Summary View Orchestration', () => {
         beforeEach(() => {
             document.body.innerHTML += '<div id="allYearsContent"></div><div id="yearlyContent"></div><button id="backToSummary"></button><h1 id="mainTitle"></h1>';

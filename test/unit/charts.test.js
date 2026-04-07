@@ -3,23 +3,25 @@ import ChartManager from '../../js/charts.js';
 
 describe('ChartManager Logical Coverage', () => {
     beforeEach(() => {
-        // Mocking canvas context
-        const mockContext = {
-            getContext: vi.fn(() => ({})),
-        };
         document.body.innerHTML = `
             <canvas id="mainSalaryChart"></canvas>
             <canvas id="earningsPie"></canvas>
             <canvas id="deductionsPie"></canvas>
         `;
-        
-        // Mock global Chart
-        global.Chart = vi.fn().mockImplementation((ctx, config) => {
-            return {
-                destroy: vi.fn(),
-                config: config
-            };
-        });
+
+        // jsdom doesn't implement getContext — mock it on the prototype
+        vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({});
+
+        // Reset charts so each test starts fresh
+        ChartManager.charts = {};
+
+        // Mock global Chart — return an object that mirrors how Chart.js instances look
+        global.Chart = vi.fn().mockImplementation((ctx, config) => ({
+            destroy: vi.fn(),
+            update: vi.fn(),
+            config,
+            data: config.data
+        }));
 
         // Mock compute style
         global.getComputedStyle = vi.fn().mockImplementation(() => ({
@@ -28,16 +30,18 @@ describe('ChartManager Logical Coverage', () => {
     });
 
     describe('initCharts() / updateCharts()', () => {
-        it('should initialize three charts and handle destruction on update', () => {
-            ChartManager.initCharts([], { base: 100, bonus: 0, overtime: 0, tax: 10, pension: 5, insurance: 5 });
-            expect(global.Chart).toHaveBeenCalledTimes(3);
-            
-            const firstCallCharts = { ...ChartManager.charts };
+        it('should create three charts on first call and update in-place on subsequent calls', () => {
             ChartManager.updateCharts([], { base: 100, bonus: 0, overtime: 0, tax: 10, pension: 5, insurance: 5 });
-            
-            // Should call destroy on previous ones
-            Object.values(firstCallCharts).forEach(c => expect(c.destroy).toHaveBeenCalled());
-            expect(global.Chart).toHaveBeenCalledTimes(6); // 3 more
+            expect(global.Chart).toHaveBeenCalledTimes(3);
+
+            const firstCallCharts = { ...ChartManager.charts };
+            ChartManager.updateCharts([], { base: 200, bonus: 0, overtime: 0, tax: 20, pension: 10, insurance: 10 });
+
+            // In-place update: no new Chart instances and no destroy calls
+            expect(global.Chart).toHaveBeenCalledTimes(3);
+            Object.values(firstCallCharts).forEach(c => expect(c.destroy).not.toHaveBeenCalled());
+            // Same chart instances should still be referenced
+            expect(ChartManager.charts.salary).toBe(firstCallCharts.salary);
         });
     });
 
