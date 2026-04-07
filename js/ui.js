@@ -4,6 +4,9 @@ const UIManager = {
         if (!this._cache[id]) this._cache[id] = document.getElementById(id);
         return this._cache[id];
     },
+    _clearCache() {
+        this._cache = {};
+    },
     refreshIcons() {
         if (window.lucide) lucide.createIcons();
     },
@@ -61,7 +64,7 @@ const UIManager = {
         `).join('');
         this.refreshIcons();
     },
-    updateMonthGrid(yearData, onMonthRefresh) {
+    updateMonthGrid(yearData, onMonthRefresh, onMonthEdit) {
         const container = this.getEl('monthCards');
         if (!container) return;
         container.innerHTML = '';
@@ -74,7 +77,10 @@ const UIManager = {
                 <div class="card-title">
                     <i data-lucide="calendar"></i>
                     ${this._formatMonth(month.month)}
-                    <button class="card-refresh-btn" title="Re-ingest ${this._formatMonth(month.month)}" style="margin-left:auto"><i data-lucide="refresh-cw"></i></button>
+                    <div style="margin-left:auto; display:flex; gap:0.25rem;">
+                        <button class="card-edit-btn" title="Edit ${this._formatMonth(month.month)} data"><i data-lucide="pencil"></i></button>
+                        <button class="card-refresh-btn" title="Re-ingest ${this._formatMonth(month.month)}"><i data-lucide="refresh-cw"></i></button>
+                    </div>
                 </div>
                 <div class="card-stat"><span>Gross:</span> <b>₪${month.gross.toLocaleString()}</b></div>
                 <div class="card-stat"><span>Net:</span> <b style="color:var(--green);">₪${month.net.toLocaleString()}</b></div>
@@ -86,6 +92,12 @@ const UIManager = {
                 card.querySelector('.card-refresh-btn').addEventListener('click', (e) => {
                     e.stopPropagation();
                     onMonthRefresh(month, card.querySelector('.card-refresh-btn'));
+                });
+            }
+            if (onMonthEdit) {
+                card.querySelector('.card-edit-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.showEditModal(month, onMonthEdit);
                 });
             }
             container.appendChild(card);
@@ -202,6 +214,87 @@ const UIManager = {
     },
     closeModal() {
         this.getEl('drilldownModal').classList.add('hidden');
+    },
+    showEditModal(monthData, onSave) {
+        const modal = this.getEl('editModal');
+        const title = this.getEl('editModalTitle');
+        const body = this.getEl('editModalBody');
+
+        const year = monthData.month?.split('-')[0] ?? '';
+        title.textContent = `Edit — ${this._formatMonth(monthData.month)} ${year}`;
+
+        const deductions = monthData.deductions || {};
+        const tax = deductions.tax ?? 0;
+        const pension = deductions.pension ?? 0;
+        const insurance = deductions.insurance ?? 0;
+
+        body.innerHTML = `
+            <div style="display:flex; flex-direction:column; gap:1rem; padding-top:0.5rem;">
+                <div>
+                    <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.3rem;">Gross</label>
+                    <input type="number" id="editGross" class="ui-select" value="${monthData.gross}" min="0" step="0.01" style="width:100%;">
+                </div>
+                <div>
+                    <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.3rem;">Net</label>
+                    <input type="number" id="editNet" class="ui-select" value="${monthData.net}" min="0" step="0.01" style="width:100%;">
+                </div>
+                <div style="border-top:1px solid var(--border); padding-top:1rem;">
+                    <p style="font-weight:600; font-size:0.8rem; margin:0 0 0.8rem; color:var(--text-secondary);">Deduction Breakdown</p>
+                    <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                        <div>
+                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">Tax</label>
+                            <input type="number" id="editTax" class="ui-select" value="${tax}" min="0" step="0.01" style="width:100%;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">Pension</label>
+                            <input type="number" id="editPension" class="ui-select" value="${pension}" min="0" step="0.01" style="width:100%;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">Insurance</label>
+                            <input type="number" id="editInsurance" class="ui-select" value="${insurance}" min="0" step="0.01" style="width:100%;">
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer" style="padding:0; box-shadow:none; margin-top:0.5rem;">
+                    <button class="action-btn secondary" id="editModalCancelBtn">Cancel</button>
+                    <button class="action-btn" id="editModalSaveBtn" style="background:var(--accent-gradient);">Save</button>
+                </div>
+            </div>
+        `;
+
+        body.querySelector('#editModalCancelBtn').onclick = () => this.closeEditModal();
+        body.querySelector('#editModalSaveBtn').onclick = async () => {
+            const saveBtn = body.querySelector('#editModalSaveBtn');
+            const gross = parseFloat(body.querySelector('#editGross').value) || 0;
+            const net = parseFloat(body.querySelector('#editNet').value) || 0;
+            const taxVal = parseFloat(body.querySelector('#editTax').value) || 0;
+            const pensionVal = parseFloat(body.querySelector('#editPension').value) || 0;
+            const insuranceVal = parseFloat(body.querySelector('#editInsurance').value) || 0;
+
+            const updates = {
+                gross,
+                net,
+                total_deductions: taxVal + pensionVal + insuranceVal,
+                deductions: { tax: taxVal, pension: pensionVal, insurance: insuranceVal }
+            };
+
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving...';
+            try {
+                await onSave(monthData.month, updates);
+                this.closeEditModal();
+            } catch (e) {
+                this.showToast('Failed to save: ' + e.message, 'alert-triangle');
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save';
+            }
+        };
+
+        this.refreshIcons();
+        modal.classList.remove('hidden');
+    },
+    closeEditModal() {
+        this.getEl('editModal').classList.add('hidden');
     },
     showToast(message, icon = 'check-circle', duration = 4000) {
         const toast = this.getEl('appToast');
@@ -404,6 +497,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.close-settings').forEach(btn => {
         btn.onclick = () => UIManager.closeSettings();
+    });
+
+    document.querySelectorAll('.close-edit-modal').forEach(btn => {
+        btn.onclick = () => UIManager.closeEditModal();
     });
 
     const closeBtn = document.querySelector('.close-modal');

@@ -188,10 +188,17 @@ const App = {
         UIManager.updateKPIs(totals, averages);
         UIManager.updateTrendAnalysis(trends);
         UIManager.updateAnomalies(insights);
-        UIManager.updateMonthGrid(filteredData, async (month, btn) => {
-            const [year, mo] = month.month.split('-');
-            await this._syncWithProgress(btn, () => window.IPCHandler.syncMonth(year, mo));
-        });
+        UIManager.updateMonthGrid(filteredData,
+            async (month, btn) => {
+                const [year, mo] = month.month.split('-');
+                await this._syncWithProgress(btn, () => window.IPCHandler.syncMonth(year, mo));
+            },
+            async (monthKey, updates) => {
+                await window.IPCHandler.saveManualEdit(monthKey, updates);
+                UIManager.showToast('Data saved successfully!', 'check-circle');
+                await this.loadData();
+            }
+        );
 
         // Update Charts
         ChartManager.updateCharts(filteredData, totals);

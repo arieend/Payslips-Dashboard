@@ -91,6 +91,28 @@ app.post('/api/config', async (req, res) => {
     }
 });
 
+// Manual edit endpoint — updates a single month's data in payslips.json and payslips.js
+app.post('/api/manual-edit', async (req, res) => {
+    try {
+        const { month, updates } = req.body;
+        if (!month || !updates) return res.status(400).json({ success: false, error: 'Invalid request' });
+        const year = month.split('-')[0];
+        const jsonPath = path.join(__dirname, 'data', 'payslips.json');
+        const data = await fs.readJson(jsonPath);
+        const yearData = data[year];
+        if (!yearData) return res.status(404).json({ success: false, error: 'Year not found' });
+        const entry = yearData.find(m => m.month === month);
+        if (!entry) return res.status(404).json({ success: false, error: 'Month not found' });
+        Object.assign(entry, updates);
+        await fs.writeJson(jsonPath, data, { spaces: 2 });
+        const jsContent = `window.PAYSLIP_DATA = ${JSON.stringify(data, null, 2)};\n`;
+        await fs.writeFile(path.join(__dirname, 'data', 'payslips.js'), jsContent);
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
 // Serve a source file by absolute path (validated against configured source dir)
 app.get('/api/source-file', (req, res) => {
     try {

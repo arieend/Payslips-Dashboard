@@ -93,6 +93,23 @@ const IPCHandler = {
     }
   },
 
+  async saveManualEdit(month, updates) {
+    if (this.isEnabled) {
+      const result = await window.electron.saveManualEdit({ month, updates });
+      if (!result.success) throw new Error(result.error || 'Save failed');
+      return result;
+    } else {
+      const res = await fetch('/api/manual-edit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ month, updates })
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Save failed');
+      return result;
+    }
+  },
+
   createStatusUI() {
     const header = document.querySelector('header') || document.body;
     const statusContainer = document.createElement('div');

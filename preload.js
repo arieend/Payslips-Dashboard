@@ -16,6 +16,7 @@ const electronBridge = {
   getConfig: () => ipcRenderer.invoke('get-config'),
   updatePath: (path) => ipcRenderer.invoke('update-path', path),
   readFileBase64: (filePath) => ipcRenderer.invoke('read-file-base64', filePath),
+  saveManualEdit: (data) => ipcRenderer.invoke('save-manual-edit', data),
   isEnabled: true
 };
 

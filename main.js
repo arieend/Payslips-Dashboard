@@ -230,6 +230,26 @@ ipcMain.handle('get-config', async () => {
   }
 });
 
+ipcMain.handle('save-manual-edit', async (event, { month, updates }) => {
+  try {
+    const jsonPath = path.join(paths.data, 'payslips.json');
+    const data = await fs.readJson(jsonPath);
+    const year = month.split('-')[0];
+    const yearData = data[year];
+    if (!yearData) return { success: false, error: 'Year not found' };
+    const entry = yearData.find(m => m.month === month);
+    if (!entry) return { success: false, error: 'Month not found' };
+    Object.assign(entry, updates);
+    await fs.writeJson(jsonPath, data, { spaces: 2 });
+    const jsContent = `window.PAYSLIP_DATA = ${JSON.stringify(data, null, 2)};\n`;
+    await fs.writeFile(path.join(paths.data, 'payslips.js'), jsContent);
+    if (mainWindow) mainWindow.webContents.send('data-updated');
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
+});
+
 // App Lifecycle
 app.whenReady().then(async () => {
   // Remove default menu
