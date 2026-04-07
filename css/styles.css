@@ -767,3 +767,95 @@ input:checked + .slider:before { transform: translateX(24px); }
     background: var(--bg-card);
     border-bottom: 1px solid var(--border);
 }
+
+/* ──── Language Toggle Button ──── */
+.lang-toggle-btn {
+    display: flex;
+    align-items: center;
+    background: var(--bg-main);
+    border: 1.5px solid var(--border);
+    border-radius: 0.5rem;
+    padding: 0.15rem;
+    cursor: pointer;
+    line-height: 1;
+    transition: var(--transition);
+    position: relative;
+    width: 4.2rem;
+    height: 2.1rem;
+    overflow: hidden;
+    gap: 0;
+}
+.lang-toggle-btn:hover {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.lang-toggle-btn .lang-flag {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    top: 50%;
+    line-height: 1;
+}
+.lang-toggle-btn .lang-flag svg {
+    border-radius: 3px;
+    display: block;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+}
+/* English active: US flag large on left, IL flag small faded on right */
+.lang-toggle-btn #langFlag {
+    left: 0.2rem;
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+}
+.lang-toggle-btn #langFlagAlt {
+    right: 0.2rem;
+    opacity: 0.3;
+    transform: translateY(-50%) scale(0.65);
+}
+/* Hebrew active: IL flag large on right, US flag small faded on left */
+body.lang-he .lang-toggle-btn #langFlag {
+    opacity: 0.3;
+    transform: translateY(-50%) scale(0.65);
+}
+body.lang-he .lang-toggle-btn #langFlagAlt {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+}
+
+/* ──── RTL / Hebrew layout adjustments ──── */
+[dir="rtl"] .header-left {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] .header-right {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] .card-title > div {
+    margin-left: unset !important;
+    margin-right: auto;
+}
+[dir="rtl"] .kpi-content {
+    text-align: right;
+}
+[dir="rtl"] .trend-info {
+    text-align: right;
+}
+[dir="rtl"] .anomaly-item {
+    text-align: right;
+}
+[dir="rtl"] .metric-item {
+    text-align: right;
+}
+[dir="rtl"] .breakdown-item {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] .modal-footer {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] .left-actions {
+    flex-direction: row-reverse;
+}
+[dir="rtl"] body {
+    font-family: 'Inter', 'Arial Hebrew', 'David', sans-serif;
+}

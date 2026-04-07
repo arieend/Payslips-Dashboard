@@ -34,7 +34,7 @@ const App = {
                         if (!window.electron) this._subscribeToIngestProgress();
                     } catch (e) {
                         console.error('[App] Sync failed:', e);
-                        UIManager.showToast('Sync failed: ' + e.message, 'alert-triangle');
+                        UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastSyncFailed') : 'Sync failed: ') + e.message, 'alert-triangle');
                     }
                 } else {
                     console.error('IPC Handler not found');
@@ -61,11 +61,14 @@ const App = {
 
         const monthFilter = document.getElementById('monthFilter');
         if (monthFilter) {
-            const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-            months.forEach((m, i) => {
+            const monthKeys = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            monthKeys.forEach((m, idx) => {
                 const opt = document.createElement('option');
-                opt.value = (i + 1).toString().padStart(2, '0');
-                opt.textContent = m;
+                opt.value = (idx + 1).toString().padStart(2, '0');
+                // Use locale-aware month name
+                const d = new Date(2000, idx, 1);
+                const locale = typeof I18n !== 'undefined' && I18n.lang === 'he' ? 'he-IL' : 'default';
+                opt.textContent = d.toLocaleString(locale, { month: 'long' });
                 monthFilter.appendChild(opt);
             });
             monthFilter.addEventListener('change', () => this.render());
@@ -73,15 +76,36 @@ const App = {
 
         const componentFilter = document.getElementById('componentFilter');
         if (componentFilter) {
-            const components = ['Gross', 'Net', 'Deductions'];
+            const components = [
+                { value: 'gross', key: 'compGross', fallback: 'Gross' },
+                { value: 'net', key: 'compNet', fallback: 'Net' },
+                { value: 'deductions', key: 'compDeductions', fallback: 'Deductions' },
+            ];
             components.forEach(c => {
                 const opt = document.createElement('option');
-                opt.value = c.toLowerCase();
-                opt.textContent = c;
+                opt.value = c.value;
+                opt.textContent = typeof I18n !== 'undefined' ? I18n.t(c.key) : c.fallback;
                 componentFilter.appendChild(opt);
             });
             componentFilter.addEventListener('change', () => this.render());
         }
+
+        // Re-render when language changes
+        document.addEventListener('langchange', () => {
+            // Rebuild month filter options with new locale
+            if (monthFilter) {
+                const selectedVal = monthFilter.value;
+                Array.from(monthFilter.options).slice(1).forEach((opt, idx) => {
+                    const d = new Date(2000, idx, 1);
+                    const locale = typeof I18n !== 'undefined' && I18n.lang === 'he' ? 'he-IL' : 'default';
+                    opt.textContent = d.toLocaleString(locale, { month: 'long' });
+                });
+                monthFilter.value = selectedVal;
+            }
+            // Destroy charts so they are recreated with translated labels
+            ChartManager.destroyAll();
+            this.render();
+        });
 
         const exportPdfBtn = document.getElementById('exportPdf');
         if (exportPdfBtn) exportPdfBtn.onclick = () => this.exportToPdf();
@@ -95,26 +119,27 @@ const App = {
                 const newPath = input.value.trim();
                 const currentStatus = (window.APP_CONFIG && window.APP_CONFIG.parentDirectoryPath) || localStorage.getItem('payslip_source_path') || '';
                 
+                const _i = typeof I18n !== 'undefined' ? I18n : null;
                 if (!newPath) {
-                    UIManager.showToast('Path cannot be empty!', 'alert-triangle');
+                    UIManager.showToast(_i ? _i.t('toastPathEmpty') : 'Path cannot be empty!', 'alert-triangle');
                     return;
                 }
                 // Require an absolute path (Windows: C:\... or \\server, Unix: /)
                 if (!/^([A-Za-z]:[\\\/]|\\\\|\/)/i.test(newPath)) {
-                    UIManager.showToast('Please provide an absolute path (e.g. C:\\Payslips)', 'alert-triangle');
+                    UIManager.showToast(_i ? _i.t('toastPathAbsolute') : 'Please provide an absolute path (e.g. C:\\Payslips)', 'alert-triangle');
                     return;
                 }
 
                 // Show loading state
                 const originalText = saveSettingsBtn.textContent;
                 saveSettingsBtn.disabled = true;
-                saveSettingsBtn.textContent = 'Updating...';
+                saveSettingsBtn.textContent = _i ? _i.t('toastPathUpdating') : 'Updating...';
 
                 try {
                     if (window.IPCHandler && window.IPCHandler.isEnabled) {
                         const result = await window.IPCHandler.updatePath(newPath);
                         if (result.success) {
-                            UIManager.showToast('Folder path updated successfully!', 'check-circle');
+                            UIManager.showToast(_i ? _i.t('toastPathUpdated') : 'Folder path updated successfully!', 'check-circle');
                             // Update local state if available
                             if (window.APP_CONFIG) window.APP_CONFIG.parentDirectoryPath = newPath;
                         }
@@ -128,19 +153,19 @@ const App = {
                         });
                         const result = await res.json();
                         if (result.success) {
-                            UIManager.showToast('Path updated! Ingestion running in background…', 'check-circle');
+                            UIManager.showToast(_i ? _i.t('toastPathUpdatedBrowser') : 'Path updated! Ingestion running in background…', 'check-circle');
                             if (!window.APP_CONFIG) window.APP_CONFIG = {};
                             window.APP_CONFIG.parentDirectoryPath = newPath;
                             localStorage.setItem('payslip_source_path', newPath);
                             this._subscribeToIngestProgress();
                         } else {
-                            UIManager.showToast('Server failed to save path: ' + (result.error || 'Unknown error'), 'alert-triangle');
+                            UIManager.showToast((_i ? _i.t('toastPathFailed') : 'Server failed to save path: ') + (result.error || 'Unknown error'), 'alert-triangle');
                         }
                     }
                     UIManager.closeSettings();
                 } catch (e) {
                     console.error('[App] Config update error:', e);
-                    UIManager.showToast('Failed to update folder path. Please check if the path exists.', 'alert-triangle');
+                    UIManager.showToast(_i ? _i.t('toastPathError') : 'Failed to update folder path. Please check if the path exists.', 'alert-triangle');
                 }
  finally {
                     saveSettingsBtn.disabled = false;
@@ -153,7 +178,7 @@ const App = {
     render() {
         if (this.currentYear === 'summary') {
             UIManager.toggleView(true);
-            document.getElementById('mainTitle').innerHTML = 'Lifetime Payslip Summary';
+            document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined' ? I18n.t('lifetimeSummary') : 'Lifetime Payslip Summary';
             const summary = DataManager.getAllYearsSummary();
             const lifetime = DataManager.getLifetimeTotals();
             UIManager.renderAllYearsDashboard(summary, lifetime,
@@ -171,11 +196,13 @@ const App = {
 
         UIManager.toggleView(false);
         const year = this.currentYear;
-        document.getElementById('mainTitle').innerHTML = `<span>${year}</span> Payslip Overview`;
+        document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined'
+            ? I18n.t('payslipOverview', { year: `<span>${year}</span>` })
+            : `<span>${year}</span> Payslip Overview`;
             
         const filteredData = this.getFilteredData();
         if (!filteredData || filteredData.length === 0) {
-            UIManager.showToast('No data available for ' + year, 'alert-circle');
+            UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastNoData') : 'No data available for ') + year, 'alert-circle');
             return;
         }
 
@@ -195,7 +222,7 @@ const App = {
             },
             async (monthKey, updates) => {
                 await window.IPCHandler.saveManualEdit(monthKey, updates);
-                UIManager.showToast('Data saved successfully!', 'check-circle');
+                UIManager.showToast(typeof I18n !== 'undefined' ? I18n.t('toastSaveOk') : 'Data saved successfully!', 'check-circle');
                 await this.loadData();
             }
         );
@@ -206,7 +233,11 @@ const App = {
         // Component filter implementation - toggle dataset visibility
         const compFilterVal = document.getElementById('componentFilter').value;
         if (compFilterVal !== 'all' && ChartManager.charts.salary) {
-            const labelMap = { 'gross': 'Gross Salary', 'net': 'Net Salary', 'deductions': 'Deductions' };
+            const labelMap = {
+                'gross': typeof I18n !== 'undefined' ? I18n.t('chartGross') : 'Gross Salary',
+                'net': typeof I18n !== 'undefined' ? I18n.t('chartNet') : 'Net Salary',
+                'deductions': typeof I18n !== 'undefined' ? I18n.t('chartDeductions') : 'Deductions'
+            };
             const selectedLabel = labelMap[compFilterVal];
             ChartManager.charts.salary.data.datasets.forEach(ds => {
                 ds.hidden = ds.label !== selectedLabel;
@@ -276,7 +307,7 @@ const App = {
             await syncFn();
         } catch (e) {
             done();
-            UIManager.showToast('Refresh failed: ' + e.message, 'alert-triangle');
+            UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastRefreshFailed') : 'Refresh failed: ') + e.message, 'alert-triangle');
             return;
         }
         if (window.electron) done();
@@ -295,7 +326,7 @@ const App = {
 
         if (wrap) { wrap.classList.remove('hidden'); }
         if (fill) fill.style.width = '0%';
-        if (label) label.textContent = 'Starting…';
+        if (label) label.textContent = typeof I18n !== 'undefined' ? I18n.t('progressStarting') : 'Starting…';
 
         const es = new EventSource('/api/ingest-progress');
         this._sseSource = es;
@@ -307,7 +338,7 @@ const App = {
             if (data.type === 'done') {
                 es.close(); this._sseSource = null;
                 if (wrap) wrap.classList.add('hidden');
-                UIManager.showToast(`Ingestion complete — ${data.count} payslips`, 'check-circle', 5000);
+                UIManager.showToast(typeof I18n !== 'undefined' ? I18n.t('toastIngestComplete', { count: data.count }) : `Ingestion complete — ${data.count} payslips`, 'check-circle', 5000);
                 this.loadData();
                 if (onDone) onDone();
                 return;
@@ -315,7 +346,7 @@ const App = {
             if (data.type === 'error') {
                 es.close(); this._sseSource = null;
                 if (wrap) wrap.classList.add('hidden');
-                UIManager.showToast('Ingestion error: ' + data.error, 'alert-triangle', 8000);
+                UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastIngestError') : 'Ingestion error: ') + data.error, 'alert-triangle', 8000);
                 if (onDone) onDone();
                 return;
             }
@@ -332,7 +363,7 @@ const App = {
                 const tag = data.cached ? ' (cached)' : ' ✓';
                 label.textContent = `${monthName}${grossStr}${tag}   (${data.current} / ${data.total})`;
             } else if (label) {
-                label.textContent = `Processing…  (${data.current} / ${data.total})`;
+                label.textContent = `${typeof I18n !== 'undefined' ? I18n.t('progressProcessing') : 'Processing…'}  (${data.current} / ${data.total})`;
             }
         };
 

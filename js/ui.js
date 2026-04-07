@@ -23,7 +23,8 @@ const UIManager = {
     updateYearSelector(years, currentYear) {
         const select = this.getEl('yearSelect');
         if (!select) return;
-        select.innerHTML = '<option value="summary">All Years Summary</option>';
+        const allYearsLabel = typeof I18n !== 'undefined' ? I18n.t('allYearsSummary') : 'All Years Summary';
+        select.innerHTML = `<option value="summary">${allYearsLabel}</option>`;
         years.forEach(year => {
             const opt = new Option(year, year);
             if (year.toString() === currentYear.toString()) opt.selected = true;
@@ -32,9 +33,10 @@ const UIManager = {
         
         const mainTitle = this.getEl('mainTitle');
         if (mainTitle) {
-            mainTitle.innerHTML = currentYear === 'summary' 
-                ? 'Lifetime Payslip Summary'
-                : `<span id="displayYear">${currentYear}</span> Payslip Overview`;
+            const i18 = typeof I18n !== 'undefined' ? I18n : null;
+            mainTitle.innerHTML = currentYear === 'summary'
+                ? (i18 ? i18.t('lifetimeSummary') : 'Lifetime Payslip Summary')
+                : (i18 ? i18.t('payslipOverview', { year: `<span id="displayYear">${currentYear}</span>` }) : `<span id="displayYear">${currentYear}</span> Payslip Overview`);
         }
     },
     updateTrendAnalysis(trend) {
@@ -73,19 +75,21 @@ const UIManager = {
             const card = document.createElement('div');
             const isFailed = month.gross === 0 && month.net === 0;
             card.className = 'month-card' + (isFailed ? ' parse-failed' : '');
+            const i = typeof I18n !== 'undefined' ? I18n : null;
+            const fmtMonth = this._formatMonth(month.month);
             card.innerHTML = `
                 <div class="card-title">
                     <i data-lucide="calendar"></i>
-                    ${this._formatMonth(month.month)}
+                    ${fmtMonth}
                     <div style="margin-left:auto; display:flex; gap:0.25rem;">
-                        <button class="card-edit-btn" title="Edit ${this._formatMonth(month.month)} data"><i data-lucide="pencil"></i></button>
-                        <button class="card-refresh-btn" title="Re-ingest ${this._formatMonth(month.month)}"><i data-lucide="refresh-cw"></i></button>
+                        <button class="card-edit-btn" title="${i ? i.t('editMonth', { month: fmtMonth }) : `Edit ${fmtMonth} data`}"><i data-lucide="pencil"></i></button>
+                        <button class="card-refresh-btn" title="${i ? i.t('reingestMonth', { month: fmtMonth }) : `Re-ingest ${fmtMonth}`}"><i data-lucide="refresh-cw"></i></button>
                     </div>
                 </div>
-                <div class="card-stat"><span>Gross:</span> <b>₪${month.gross.toLocaleString()}</b></div>
-                <div class="card-stat"><span>Net:</span> <b style="color:var(--green);">₪${month.net.toLocaleString()}</b></div>
-                <div class="card-stat"><span>Deductions:</span> <b style="color:var(--red);">₪${(month.total_deductions || Math.max(0, month.gross - month.net)).toLocaleString()}</b></div>
-                <button class="view-btn">View Source</button>
+                <div class="card-stat"><span>${i ? i.t('gross') : 'Gross'}:</span> <b>₪${month.gross.toLocaleString()}</b></div>
+                <div class="card-stat"><span>${i ? i.t('net') : 'Net'}:</span> <b style="color:var(--green);">₪${month.net.toLocaleString()}</b></div>
+                <div class="card-stat"><span>${i ? i.t('deductions') : 'Deductions'}:</span> <b style="color:var(--red);">₪${(month.total_deductions || Math.max(0, month.gross - month.net)).toLocaleString()}</b></div>
+                <button class="view-btn">${i ? i.t('viewSource') : 'View Source'}</button>
             `;
             card.querySelector('.view-btn').onclick = () => this.showMonthDetails(month, false);
             if (onMonthRefresh) {
@@ -105,6 +109,7 @@ const UIManager = {
         this.refreshIcons();
     },
     _formatMonth(monthIso) {
+        if (typeof I18n !== 'undefined') return I18n.formatMonth(monthIso);
         if (!monthIso) return 'N/A';
         if (!monthIso.includes('-')) return monthIso;
         const date = new Date(monthIso + "-01");
@@ -132,29 +137,29 @@ const UIManager = {
                     <h3 id="modalTitle"></h3>
                     <div style="display:flex; flex-direction:column; align-items:flex-end; margin-right: 2.5rem;">
                         <span class="source-file" id="modalSourceFile"></span>
-                        <a id="downloadLink" href="#" target="_blank" style="font-size:0.7rem; color:var(--blue); text-decoration:none; margin-top:0.2rem;">Open in new tab</a>
+                        <a id="downloadLink" href="#" target="_blank" style="font-size:0.7rem; color:var(--blue); text-decoration:none; margin-top:0.2rem;">${typeof I18n !== 'undefined' ? I18n.t('openNewTab') : 'Open in new tab'}</a>
                     </div>
                 </div>
                 
                 <div class="modal-grid" id="parsedSummaryGrid" style="${showParsed ? 'display:grid;' : 'display:none;'}">
                    <div class="breakdown-card">
-                        <h4>Parsed Summary</h4>
-                        <div class="breakdown-item"><span>Gross:</span> <b id="detailGross"></b></div>
-                        <div class="breakdown-item"><span>Net:</span> <b id="detailNet" style="color:var(--green);"></b></div>
-                        <div class="breakdown-item"><span>Deductions:</span> <b id="detailDeductions" style="color:var(--red);"></b></div>
+                        <h4>${typeof I18n !== 'undefined' ? I18n.t('parsedSummary') : 'Parsed Summary'}</h4>
+                        <div class="breakdown-item"><span>${typeof I18n !== 'undefined' ? I18n.t('gross') : 'Gross'}:</span> <b id="detailGross"></b></div>
+                        <div class="breakdown-item"><span>${typeof I18n !== 'undefined' ? I18n.t('net') : 'Net'}:</span> <b id="detailNet" style="color:var(--green);"></b></div>
+                        <div class="breakdown-item"><span>${typeof I18n !== 'undefined' ? I18n.t('deductions') : 'Deductions'}:</span> <b id="detailDeductions" style="color:var(--red);"></b></div>
                    </div>
                    <div class="breakdown-card">
-                        <h4>Deduction Breakdown</h4>
-                        <div class="breakdown-item"><span>Tax:</span> <b id="detailTax"></b></div>
-                        <div class="breakdown-item"><span>Pension:</span> <b id="detailPension"></b></div>
-                        <div class="breakdown-item"><span>Insurance:</span> <b id="detailInsurance"></b></div>
+                        <h4>${typeof I18n !== 'undefined' ? I18n.t('deductionBreakdown') : 'Deduction Breakdown'}</h4>
+                        <div class="breakdown-item"><span>${typeof I18n !== 'undefined' ? I18n.t('tax') : 'Tax'}:</span> <b id="detailTax"></b></div>
+                        <div class="breakdown-item"><span>${typeof I18n !== 'undefined' ? I18n.t('pension') : 'Pension'}:</span> <b id="detailPension"></b></div>
+                        <div class="breakdown-item"><span>${typeof I18n !== 'undefined' ? I18n.t('insurance') : 'Insurance'}:</span> <b id="detailInsurance"></b></div>
                    </div>
                 </div>
 
                 <div class="viewer-container" style="flex:1; display:flex; flex-direction:column; min-height:0;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-                         <h4 class="raw-content-header" style="margin:0;">${isPdf ? 'Original PDF Document' : 'Raw Document Content'}</h4>
-                         ${isPdf ? '<button id="toggleRaw" style="font-size:0.7rem; background:none; border:1px solid var(--border); padding:2px 8px; border-radius:4px; cursor:pointer;">Show Raw Text</button>' : ''}
+                         <h4 class="raw-content-header" style="margin:0;">${isPdf ? (typeof I18n !== 'undefined' ? I18n.t('originalPdf') : 'Original PDF Document') : (typeof I18n !== 'undefined' ? I18n.t('rawContent') : 'Raw Document Content')}</h4>
+                         ${isPdf ? `<button id="toggleRaw" style="font-size:0.7rem; background:none; border:1px solid var(--border); padding:2px 8px; border-radius:4px; cursor:pointer;">${typeof I18n !== 'undefined' ? I18n.t('showRawText') : 'Show Raw Text'}</button>` : ''}
                     </div>
                     <div id="pdfViewerFrame" style="flex:1; border:1px solid var(--border); border-radius:0.5rem; overflow:hidden; background:#525659; display:${isPdf ? 'block' : 'none'};">
                         <iframe src="${pdfUrl || 'about:blank'}" width="100%" height="100%" frameborder="0"></iframe>
@@ -164,7 +169,10 @@ const UIManager = {
             </div>
         `;
 
-        body.querySelector('#modalTitle').textContent = `${this._formatMonth(monthData.month)} Payslip ${showParsed ? 'Summary' : 'Source'}`;
+        const modalTitleKey = showParsed ? 'modalTitleSummary' : 'modalTitleSource';
+        body.querySelector('#modalTitle').textContent = typeof I18n !== 'undefined'
+            ? I18n.t(modalTitleKey, { month: this._formatMonth(monthData.month) })
+            : `${this._formatMonth(monthData.month)} Payslip ${showParsed ? 'Summary' : 'Source'}`;
         body.querySelector('#modalSourceFile').textContent = monthData.source_file?.split(/[\\\/]/).pop() ?? 'Unknown file';
         
         if (pdfUrl) {
@@ -180,7 +188,7 @@ const UIManager = {
                 body.querySelector('#downloadLink').href = blobUrl;
             }).catch(() => {
                 const frame = body.querySelector('#pdfViewerFrame iframe');
-                if (frame) frame.parentElement.innerHTML = '<p style="color:var(--text-secondary);padding:1rem;">Could not load PDF.</p>';
+                if (frame) frame.parentElement.innerHTML = `<p style="color:var(--text-secondary);padding:1rem;">${typeof I18n !== 'undefined' ? I18n.t('pdfLoadError') : 'Could not load PDF.'}</p>`;
             });
         } else {
             body.querySelector('#downloadLink').style.display = 'none';
@@ -196,7 +204,7 @@ const UIManager = {
             body.querySelector('#detailInsurance').textContent = `₪${(monthData.deductions?.insurance ?? 0).toLocaleString()}`;
         }
         
-        body.querySelector('#rawContentArea').textContent = monthData.raw_text || 'Raw text not available.';
+        body.querySelector('#rawContentArea').textContent = monthData.raw_text || (typeof I18n !== 'undefined' ? I18n.t('rawTextUnavailable') : 'Raw text not available.');
         
         const toggleBtn = body.querySelector('#toggleRaw');
         if (toggleBtn) {
@@ -204,7 +212,9 @@ const UIManager = {
                 const isShowingPdf = body.querySelector('#pdfViewerFrame').style.display !== 'none';
                 body.querySelector('#pdfViewerFrame').style.display = isShowingPdf ? 'none' : 'block';
                 body.querySelector('#rawContentArea').style.display = isShowingPdf ? 'block' : 'none';
-                toggleBtn.textContent = isShowingPdf ? 'Show PDF Viewer' : 'Show Raw Text';
+                toggleBtn.textContent = isShowingPdf
+                    ? (typeof I18n !== 'undefined' ? I18n.t('showPdfViewer') : 'Show PDF Viewer')
+                    : (typeof I18n !== 'undefined' ? I18n.t('showRawText') : 'Show Raw Text');
             };
         }
 
@@ -221,43 +231,46 @@ const UIManager = {
         const body = this.getEl('editModalBody');
 
         const year = monthData.month?.split('-')[0] ?? '';
-        title.textContent = `Edit — ${this._formatMonth(monthData.month)} ${year}`;
+        title.textContent = typeof I18n !== 'undefined'
+            ? I18n.t('editPayslipTitle', { month: this._formatMonth(monthData.month), year })
+            : `Edit — ${this._formatMonth(monthData.month)} ${year}`;
 
         const deductions = monthData.deductions || {};
         const tax = deductions.tax ?? 0;
         const pension = deductions.pension ?? 0;
         const insurance = deductions.insurance ?? 0;
 
+        const ii = typeof I18n !== 'undefined' ? I18n : null;
         body.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:1rem; padding-top:0.5rem;">
                 <div>
-                    <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.3rem;">Gross</label>
+                    <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.3rem;">${ii ? ii.t('editGrossLabel') : 'Gross'}</label>
                     <input type="number" id="editGross" class="ui-select" value="${monthData.gross}" min="0" step="0.01" style="width:100%;">
                 </div>
                 <div>
-                    <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.3rem;">Net</label>
+                    <label style="font-weight:600; font-size:0.85rem; display:block; margin-bottom:0.3rem;">${ii ? ii.t('editNetLabel') : 'Net'}</label>
                     <input type="number" id="editNet" class="ui-select" value="${monthData.net}" min="0" step="0.01" style="width:100%;">
                 </div>
                 <div style="border-top:1px solid var(--border); padding-top:1rem;">
-                    <p style="font-weight:600; font-size:0.8rem; margin:0 0 0.8rem; color:var(--text-secondary);">Deduction Breakdown</p>
+                    <p style="font-weight:600; font-size:0.8rem; margin:0 0 0.8rem; color:var(--text-secondary);">${ii ? ii.t('editDeductionsHeader') : 'Deduction Breakdown'}</p>
                     <div style="display:flex; flex-direction:column; gap:0.6rem;">
                         <div>
-                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">Tax</label>
+                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">${ii ? ii.t('editTaxLabel') : 'Tax'}</label>
                             <input type="number" id="editTax" class="ui-select" value="${tax}" min="0" step="0.01" style="width:100%;">
                         </div>
                         <div>
-                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">Pension</label>
+                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">${ii ? ii.t('editPensionLabel') : 'Pension'}</label>
                             <input type="number" id="editPension" class="ui-select" value="${pension}" min="0" step="0.01" style="width:100%;">
                         </div>
                         <div>
-                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">Insurance</label>
+                            <label style="font-size:0.8rem; display:block; margin-bottom:0.2rem;">${ii ? ii.t('editInsuranceLabel') : 'Insurance'}</label>
                             <input type="number" id="editInsurance" class="ui-select" value="${insurance}" min="0" step="0.01" style="width:100%;">
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer" style="padding:0; box-shadow:none; margin-top:0.5rem;">
-                    <button class="action-btn secondary" id="editModalCancelBtn">Cancel</button>
-                    <button class="action-btn" id="editModalSaveBtn" style="background:var(--accent-gradient);">Save</button>
+                    <button class="action-btn secondary" id="editModalCancelBtn">${ii ? ii.t('cancelBtn') : 'Cancel'}</button>
+                    <button class="action-btn" id="editModalSaveBtn" style="background:var(--accent-gradient);">${ii ? ii.t('saveBtn') : 'Save'}</button>
                 </div>
             </div>
         `;
@@ -279,14 +292,14 @@ const UIManager = {
             };
 
             saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving...';
+            saveBtn.textContent = typeof I18n !== 'undefined' ? I18n.t('savingBtn') : 'Saving...';
             try {
                 await onSave(monthData.month, updates);
                 this.closeEditModal();
             } catch (e) {
                 this.showToast('Failed to save: ' + e.message, 'alert-triangle');
                 saveBtn.disabled = false;
-                saveBtn.textContent = 'Save';
+                saveBtn.textContent = typeof I18n !== 'undefined' ? I18n.t('saveBtn') : 'Save';
             }
         };
 
@@ -388,7 +401,7 @@ const UIManager = {
                             : folderName;
                         input.value = guessedPath;
                         if (activePathSpan) activePathSpan.textContent = guessedPath;
-                        this.showToast('Folder selected. Verify path and click Update Dashboard.', 'info');
+                        this.showToast(typeof I18n !== 'undefined' ? I18n.t('toastFolderSelected') : 'Folder selected. Verify path and click Update Dashboard.', 'info');
                     }
                     folderInput.value = ''; // reset so same folder can be re-picked
                 };
@@ -421,22 +434,23 @@ const UIManager = {
                 const shadowStyle = failRatio > 0
                     ? ` style="box-shadow: 0 0 0 2px rgba(239,68,68,${(failRatio * 0.6 + 0.2).toFixed(2)}), 0 4px 16px rgba(239,68,68,${(failRatio * 0.35).toFixed(2)});"`
                     : '';
+                const i18 = typeof I18n !== 'undefined' ? I18n : null;
                 return `
                 <div class="year-card" data-year="${year}"${shadowStyle}>
                     <div class="card-header">
                         <span class="year-label">${year}</span>
                         <div style="display:flex;align-items:center;gap:0.5rem;">
-                            <span class="months-tag">${months} Months</span>
-                            <button class="card-refresh-btn" data-year="${year}" title="Re-ingest ${year}"><i data-lucide="refresh-cw"></i></button>
+                            <span class="months-tag">${months} ${i18 ? i18.t('months') : 'Months'}</span>
+                            <button class="card-refresh-btn" data-year="${year}" title="${i18 ? i18.t('reingestYear', { year }) : `Re-ingest ${year}`}"><i data-lucide="refresh-cw"></i></button>
                         </div>
                     </div>
                     <div class="card-metrics">
                         <div class="metric-item">
-                            <span class="metric-label">Total Gross</span>
+                            <span class="metric-label">${i18 ? i18.t('totalGross') : 'Total Gross'}</span>
                             <span class="metric-value">₪${totalGross.toLocaleString()}</span>
                         </div>
                         <div class="metric-item">
-                            <span class="metric-label">Total Net</span>
+                            <span class="metric-label">${i18 ? i18.t('totalNet') : 'Total Net'}</span>
                             <span class="metric-value net">₪${totalNet.toLocaleString()}</span>
                         </div>
                     </div>
@@ -466,16 +480,17 @@ const UIManager = {
     },
     showWelcomeScreen() {
         this.toggleView(true);
-        this.getEl('mainTitle').innerHTML = 'Welcome to Payslip Dashboard';
+        const i18 = typeof I18n !== 'undefined' ? I18n : null;
+        this.getEl('mainTitle').innerHTML = i18 ? i18.t('welcomeTitle') : 'Welcome to Payslip Dashboard';
         const grid = this.getEl('yearCardsGrid');
         if (grid) {
             grid.innerHTML = `
                 <div class="welcome-card" style="grid-column: 1 / -1; padding: 2rem; border: 2px dashed var(--border); border-radius: 1rem; text-align: center; background: var(--bg-card);">
                     <i data-lucide="folder-search" style="width: 3rem; height: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
-                    <h3 style="margin-bottom: 0.5rem;">No Data Found</h3>
-                    <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">Select the folder containing your PDF payslips to get started.</p>
+                    <h3 style="margin-bottom: 0.5rem;">${i18 ? i18.t('noDataFound') : 'No Data Found'}</h3>
+                    <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">${i18 ? i18.t('noDataHint') : 'Select the folder containing your PDF payslips to get started.'}</p>
                     <button class="action-btn" onclick="window.IPCHandler && window.IPCHandler.isEnabled ? window.IPCHandler.selectFolder() : UIManager.openSettings()">
-                        <i data-lucide="folder-plus"></i> Select Folder
+                        <i data-lucide="folder-plus"></i> ${i18 ? i18.t('selectFolder') : 'Select Folder'}
                     </button>
                 </div>
             `;
