@@ -86,7 +86,7 @@ Month is derived from PDF text first (Hebrew and English month names supported),
 
 ## Security Conventions
 
-**Path validation** — always use `path.relative(resolvedBase, resolved)` to guard file-serving; check `relative.startsWith('..') || path.isAbsolute(relative)`. Never use `startsWith()` string comparison (breaks on Windows case folding).
+**Path validation** — always use `path.relative(resolvedBase, resolved)` to guard file-serving; check `relative.startsWith('..')` only (`path.relative` never returns an absolute path so `path.isAbsolute` is redundant). Never use raw string `startsWith()` (breaks on Windows case folding).
 
 **Month parameters** — validate with `/^\d{4}-\d{2}$/.test(month)` before use in IPC handlers (`main.js`) and Express endpoints (`server.js`).
 
@@ -95,3 +95,9 @@ Month is derived from PDF text first (Hebrew and English month names supported),
 **`runIngestion()` calls** — always append `.catch(err => console.error(...))` at fire-and-forget call sites; the function handles its own errors internally but unhandled rejections still surface without a catch.
 
 **Express CSRF** — `server.js` has a localhost-only `Origin`/`Referer` guard middleware for all mutating methods. Keep it in place when adding new endpoints.
+
+**Dual-file writes** — use `writePayslipData(data, dataPath)` from `scripts/data-writer.js` whenever writing `payslips.json` + `payslips.js`. Never duplicate this write inline in `main.js`, `server.js`, or `ingest.js`.
+
+**i18n in frontend** — use `this._t(key, fallback)` (available on both `ChartManager` and `UIManager`) instead of the raw `typeof I18n !== 'undefined' ? I18n.t(key) : fallback` guard.
+
+**`server.js` config cache** — `readConfig()` caches the YAML config in memory; call `invalidateConfig()` after any write to `CONFIG_PATH`. New endpoints must use `await readConfig()`, not `fs.readFileSync`.
