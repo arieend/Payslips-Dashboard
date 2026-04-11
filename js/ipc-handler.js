@@ -57,14 +57,26 @@ const IPCHandler = {
     throw new Error('Failed to update path');
   },
 
+  // Send a POST to the REST API (browser mode) or invoke an IPC channel (Electron mode).
+  async _makeRequest(ipcMethod, ipcArgs, endpoint, body) {
+    if (this.isEnabled) {
+      return ipcMethod(...ipcArgs);
+    }
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    return response.json();
+  },
+
   async syncNow() {
     if (this.isEnabled) {
       await window.electron.manualSync();
     } else {
       console.log('[IPCHandler] Non-electron mode. Calling server ingestion API...');
       try {
-        const response = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-        const result = await response.json();
+        const result = await this._makeRequest(null, [], '/api/ingest', {});
         if (result.success) {
           console.log(`[IPCHandler] Server sync successful: ${result.count} items.`);
           if (window.app && window.app.loadData) await window.app.loadData();
@@ -78,19 +90,17 @@ const IPCHandler = {
   },
 
   async syncYear(year) {
-    if (this.isEnabled) {
-      await window.electron.syncYear(year);
-    } else {
-      await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ year }) });
-    }
+    await this._makeRequest(
+      () => window.electron.syncYear(year), [],
+      '/api/ingest', { year }
+    );
   },
 
   async syncMonth(year, month) {
-    if (this.isEnabled) {
-      await window.electron.syncMonth({ year, month });
-    } else {
-      await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ year, month }) });
-    }
+    await this._makeRequest(
+      () => window.electron.syncMonth({ year, month }), [],
+      '/api/ingest', { year, month }
+    );
   },
 
   async saveManualEdit(month, updates) {

@@ -7,6 +7,7 @@ const { pdfToPng } = require('pdf-to-png-converter');
 const { createCanvas, loadImage } = require('@napi-rs/canvas');
 
 const { productName } = require('../package.json');
+const { writePayslipData } = require('./data-writer');
 const CONFIG_FILENAME = `${productName}.yaml`;
 
 // --- OCR rotation helpers ---
@@ -66,14 +67,10 @@ async function ocrWithRotation(imgBuf) {
             const rotated = await rotateImageBuffer(imgBuf, deg);
             const text = await runOcr(rotated);
             const score = scoreOcrText(text);
-            // Accept this rotation if it's better AND now contains real payslip content
-            if (score > bestScore && isReadablePayslipText(text)) {
+            if (score > bestScore) {
                 bestScore = score;
                 bestText = text;
-                break; // First rotation with real content wins
-            } else if (score > bestScore) {
-                bestScore = score;
-                bestText = text;
+                if (isReadablePayslipText(text)) break; // First rotation with real content wins
             }
         }
     }
@@ -89,19 +86,24 @@ function parseNum(str) {
     return isNaN(val) ? 0 : val;
 }
 
-async function getAllFiles(dirPath, arrayOfFiles) {
+async function getAllFiles(dirPath) {
     const files = await fs.readdir(dirPath);
-    arrayOfFiles = arrayOfFiles || [];
-
-    for (const file of files) {
-        const fullPath = path.join(dirPath, file);
-        if ((await fs.stat(fullPath)).isDirectory()) {
-            arrayOfFiles = await getAllFiles(fullPath, arrayOfFiles);
+    const entries = await Promise.all(
+        files.map(async file => {
+            const fullPath = path.join(dirPath, file);
+            const stat = await fs.stat(fullPath);
+            return { fullPath, isDir: stat.isDirectory() };
+        })
+    );
+    const results = [];
+    for (const { fullPath, isDir } of entries) {
+        if (isDir) {
+            results.push(...await getAllFiles(fullPath));
         } else {
-            arrayOfFiles.push(fullPath);
+            results.push(fullPath);
         }
     }
-    return arrayOfFiles;
+    return results;
 }
 
 const FINANCE_REGEX_CACHE = new Map();
@@ -251,8 +253,7 @@ async function ingest(targetDir = null, onProgress = null, { forceYear = null, f
     }
 
     // Write both JSON and JS for browser/electron compatibility
-    await fs.writeJson(path.join(dataPath, 'payslips.json'), finalData, { spaces: 2 });
-    await fs.writeFile(path.join(dataPath, 'payslips.js'), `window.PAYSLIP_DATA = ${JSON.stringify(finalData, null, 2)};`);
+    await writePayslipData(finalData, dataPath);
     
     // Also update config.js if it exists
     const config = await fs.readFile(configPath, 'utf8').then(s => yaml.load(s) || {}).catch(() => ({}));

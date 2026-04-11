@@ -4,6 +4,7 @@ const fs = require('fs-extra');
 const yaml = require('js-yaml');
 const { productName } = require('./package.json');
 const { ingest } = require('./scripts/ingest');
+const { writePayslipData } = require('./scripts/data-writer');
 
 const app = express();
 const PORT = 3000;
@@ -81,12 +82,27 @@ app.post('/api/ingest', (req, res) => {
 
 const CONFIG_PATH = path.join(__dirname, `${productName}.yaml`);
 
+// Cached config — invalidated whenever the config file is written
+let _configCache = null;
+async function readConfig() {
+    if (_configCache) return _configCache;
+    try {
+        const raw = await fs.readFile(CONFIG_PATH, 'utf8');
+        _configCache = yaml.load(raw) || {};
+    } catch {
+        _configCache = {};
+    }
+    return _configCache;
+}
+function invalidateConfig() { _configCache = null; }
+
 // Endpoint to update configuration from browser
 app.post('/api/config', async (req, res) => {
     const { parentDirectoryPath } = req.body;
     console.log('[Server] Updating config to:', parentDirectoryPath);
     try {
         await fs.writeFile(CONFIG_PATH, yaml.dump({ parentDirectoryPath }));
+        invalidateConfig();
 
         // Re-setup the proxy on the fly
         if (parentDirectoryPath && fs.existsSync(parentDirectoryPath)) {
@@ -124,9 +140,7 @@ app.post('/api/manual-edit', async (req, res) => {
         const entry = yearData.find(m => m.month === month);
         if (!entry) return res.status(404).json({ success: false, error: 'Month not found' });
         Object.assign(entry, updates);
-        await fs.writeJson(jsonPath, data, { spaces: 2 });
-        const jsContent = `window.PAYSLIP_DATA = ${JSON.stringify(data, null, 2)};\n`;
-        await fs.writeFile(path.join(__dirname, 'data', 'payslips.js'), jsContent);
+        await writePayslipData(data, path.join(__dirname, 'data'));
         res.json({ success: true });
     } catch (e) {
         res.status(500).json({ success: false, error: e.message });
@@ -134,18 +148,18 @@ app.post('/api/manual-edit', async (req, res) => {
 });
 
 // Serve a source file by absolute path (validated against configured source dir)
-app.get('/api/source-file', (req, res) => {
+app.get('/api/source-file', async (req, res) => {
     try {
         const filePath = req.query.path;
         if (!filePath) return res.status(400).end();
-        const config = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8')) || {};
+        const config = await readConfig();
         const sourceDir = config.parentDirectoryPath;
         if (!sourceDir) return res.status(403).end();
         const resolved = path.resolve(filePath);
         const resolvedSource = path.resolve(sourceDir);
-        // Use path.relative to avoid case-sensitivity/symlink bypass on Windows
+        // Use path.relative — startsWith('..') covers all out-of-bounds cases.
         const relative = path.relative(resolvedSource, resolved);
-        if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        if (relative.startsWith('..')) {
             return res.status(403).end();
         }
         res.sendFile(resolved);
@@ -154,17 +168,19 @@ app.get('/api/source-file', (req, res) => {
     }
 });
 
-// Setup payslips_source proxy
+// Setup payslips_source proxy — seed the config cache at startup
 try {
-    const config = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8')) || {};
-    if (config.parentDirectoryPath && fs.existsSync(config.parentDirectoryPath)) {
-        app.use('/payslips_source', express.static(config.parentDirectoryPath));
-        console.log('[Server] Proxying /payslips_source to:', config.parentDirectoryPath);
+    const rawConfig = fs.readFileSync(CONFIG_PATH, 'utf8');
+    _configCache = yaml.load(rawConfig) || {};
+    if (_configCache.parentDirectoryPath && fs.existsSync(_configCache.parentDirectoryPath)) {
+        app.use('/payslips_source', express.static(_configCache.parentDirectoryPath));
+        console.log('[Server] Proxying /payslips_source to:', _configCache.parentDirectoryPath);
     } else {
-        console.warn('[Server] Invalid source path in config:', config.parentDirectoryPath);
+        console.warn('[Server] Invalid source path in config:', _configCache.parentDirectoryPath);
     }
 } catch (e) {
     console.warn('[Server] Could not setup payslips_source proxy:', e.message);
+    _configCache = {};
 }
 
 app.listen(PORT, () => {

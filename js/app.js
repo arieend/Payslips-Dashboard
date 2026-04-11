@@ -1,6 +1,7 @@
 const App = {
     currentYear: null,
     allYears: [],
+    _selectedComponent: 'all',
     
     async init() {
         console.log('Initializing Payslip Infographic App...');
@@ -10,7 +11,7 @@ const App = {
     },
 
     async loadData() {
-        const rawData = await DataManager.load(true); 
+        const rawData = await DataManager.load();
         if (!rawData) {
             console.error('No data found.');
             UIManager.showWelcomeScreen();
@@ -87,7 +88,10 @@ const App = {
                 opt.textContent = typeof I18n !== 'undefined' ? I18n.t(c.key) : c.fallback;
                 componentFilter.appendChild(opt);
             });
-            componentFilter.addEventListener('change', () => this.render());
+            componentFilter.addEventListener('change', () => {
+                this._selectedComponent = componentFilter.value;
+                this.render();
+            });
         }
 
         // Re-render when language changes
@@ -235,15 +239,24 @@ const App = {
         // Update Charts
         ChartManager.updateCharts(filteredData, totals);
 
-        // Component filter implementation - toggle dataset visibility
-        const compFilterVal = document.getElementById('componentFilter').value;
-        if (compFilterVal !== 'all' && ChartManager.charts.salary) {
+        // Component filter — sync from DOM (preserves direct DOM changes and test setup),
+        // then restore the DOM value to persist across year switches.
+        const componentFilter = document.getElementById('componentFilter');
+        if (componentFilter) {
+            // Prefer DOM value if it was explicitly changed, otherwise restore persisted value
+            if (componentFilter.value !== 'all') {
+                this._selectedComponent = componentFilter.value;
+            } else if (this._selectedComponent !== 'all') {
+                componentFilter.value = this._selectedComponent;
+            }
+        }
+        if (this._selectedComponent !== 'all' && ChartManager.charts.salary) {
             const labelMap = {
                 'gross': typeof I18n !== 'undefined' ? I18n.t('chartGross') : 'Gross Salary',
                 'net': typeof I18n !== 'undefined' ? I18n.t('chartNet') : 'Net Salary',
                 'deductions': typeof I18n !== 'undefined' ? I18n.t('chartDeductions') : 'Deductions'
             };
-            const selectedLabel = labelMap[compFilterVal];
+            const selectedLabel = labelMap[this._selectedComponent];
             ChartManager.charts.salary.data.datasets.forEach(ds => {
                 ds.hidden = ds.label !== selectedLabel;
             });

@@ -1,6 +1,7 @@
 const DataManager = {
     _raw: null,
     _loadPromise: null,
+    _sortedYears: null,
 
     async load(forceFetch = false) {
         // Prevent concurrent fetches — queue behind the in-flight request
@@ -10,28 +11,21 @@ const DataManager = {
     },
 
     async _doLoad(forceFetch) {
-        // Fallback helper to wait for global data if fetch fails
-        const getGlobalData = async () => {
-            if (window.PAYSLIP_DATA) return window.PAYSLIP_DATA;
-            // Wait up to 2 seconds for dynamic scripts
-            return new Promise(resolve => {
-                let attempts = 0;
-                const interval = setInterval(() => {
-                    attempts++;
-                    if (window.PAYSLIP_DATA) {
-                        clearInterval(interval);
-                        resolve(window.PAYSLIP_DATA);
-                    } else if (attempts > 20) {
-                        clearInterval(interval);
-                        resolve(null);
-                    }
-                }, 100);
-            });
-        };
+        // Fallback helper to wait up to 2 seconds for window.PAYSLIP_DATA
+        const getGlobalData = () => new Promise(resolve => {
+            if (window.PAYSLIP_DATA) return resolve(window.PAYSLIP_DATA);
+            const check = (remaining) => {
+                if (window.PAYSLIP_DATA) return resolve(window.PAYSLIP_DATA);
+                if (remaining <= 0) return resolve(null);
+                setTimeout(() => check(remaining - 100), 100);
+            };
+            check(2000);
+        });
 
         // Only use global if not forcing a fresh fetch (e.g. background update)
         if (window.PAYSLIP_DATA && !forceFetch) {
             this._raw = window.PAYSLIP_DATA;
+            this._sortedYears = null;
             return this._raw;
         }
 
@@ -41,12 +35,14 @@ const DataManager = {
             const response = await fetch(`${baseUrl}data/payslips.json?v=${Date.now()}`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             this._raw = await response.json();
+            this._sortedYears = null;
             console.log('[DataManager] Data loaded from JSON file.');
             return this._raw;
         } catch (error) {
             console.warn('Fetch failed, trying global variable fallback...', error.message);
             this._raw = await getGlobalData();
             if (this._raw) {
+                this._sortedYears = null;
                 console.log('[DataManager] Data loaded from window.PAYSLIP_DATA fallback.');
                 return this._raw;
             }
@@ -56,7 +52,10 @@ const DataManager = {
 
     getYears() {
         if (!this._raw) return [];
-        return Object.keys(this._raw).sort((a, b) => b - a);
+        if (!this._sortedYears) {
+            this._sortedYears = Object.keys(this._raw).sort((a, b) => b - a);
+        }
+        return this._sortedYears;
     },
 
     getDataForYear(year) {

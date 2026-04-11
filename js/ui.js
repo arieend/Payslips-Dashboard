@@ -7,18 +7,23 @@ const UIManager = {
     _clearCache() {
         this._cache = {};
     },
+    // Translate a key via I18n if available, else return fallback
+    _t(key, fallback) {
+        return typeof I18n !== 'undefined' ? I18n.t(key) : fallback;
+    },
+    // Set the .kpi-value text inside a KPI card by its CSS selector
+    _setKPI(selector, val) {
+        const el = document.querySelector(`${selector} .kpi-value`);
+        if (el) el.textContent = val;
+    },
     refreshIcons() {
         if (window.lucide) lucide.createIcons();
     },
     updateKPIs(totals, averages) {
-        const setVal = (id, val) => {
-            const el = document.querySelector(`${id} .kpi-value`);
-            if (el) el.textContent = val;
-        };
-        setVal('#kpi-gross', `₪${totals.gross.toLocaleString()}`);
-        setVal('#kpi-net', `₪${totals.net.toLocaleString()}`);
-        setVal('#kpi-deductions', `₪${totals.deductions.toLocaleString()}`);
-        setVal('#kpi-avg', `₪${Math.round(averages.net).toLocaleString()}`);
+        this._setKPI('#kpi-gross', `₪${totals.gross.toLocaleString()}`);
+        this._setKPI('#kpi-net', `₪${totals.net.toLocaleString()}`);
+        this._setKPI('#kpi-deductions', `₪${totals.deductions.toLocaleString()}`);
+        this._setKPI('#kpi-avg', `₪${Math.round(averages.net).toLocaleString()}`);
     },
     updateYearSelector(years, currentYear) {
         const select = this.getEl('yearSelect');
@@ -429,13 +434,9 @@ const UIManager = {
         this.getEl('settingsModal').classList.add('hidden');
     },
     renderAllYearsDashboard(summaryData, lifetimeTotals, onYearClick, onYearRefresh) {
-        const setVal = (id, val) => {
-            const el = document.querySelector(`${id} .kpi-value`);
-            if (el) el.textContent = val;
-        };
-        setVal('#summary-gross', `₪${lifetimeTotals.gross.toLocaleString()}`);
-        setVal('#summary-net', `₪${lifetimeTotals.net.toLocaleString()}`);
-        setVal('#summary-years', summaryData.length);
+        this._setKPI('#summary-gross', `₪${lifetimeTotals.gross.toLocaleString()}`);
+        this._setKPI('#summary-net', `₪${lifetimeTotals.net.toLocaleString()}`);
+        this._setKPI('#summary-years', summaryData.length);
 
         ChartManager.initAllYearsCharts(summaryData, lifetimeTotals);
 
@@ -522,6 +523,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (themeSwitch) {
         themeSwitch.addEventListener('change', (e) => {
             document.body.className = e.target.checked ? 'dark-mode' : 'light-mode';
+            if (typeof ChartManager !== 'undefined') ChartManager._clearColorCache();
         });
     }
     const openBtn = document.getElementById('openSettings');

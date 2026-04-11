@@ -1,20 +1,32 @@
 const ChartManager = {
     charts: {},
+    _colorCache: {},
 
     destroyAll() {
         Object.values(this.charts).forEach(c => { try { c.destroy(); } catch(e) {} });
         this.charts = {};
     },
 
+    // Clear cached CSS variable values (call after theme switch)
+    _clearColorCache() {
+        this._colorCache = {};
+    },
+
+    // Translate a key via I18n if available, else return fallback
+    _t(key, fallback) {
+        return typeof I18n !== 'undefined' ? I18n.t(key) : fallback;
+    },
+
     // Update yearly charts in-place if they exist, create them if not.
     updateCharts(yearData, totals) {
         const labels = this._monthLabels(yearData);
+        const deductionsData = yearData.map(d => d.total_deductions || Math.max(0, d.gross - d.net));
 
         if (this.charts.salary) {
             this.charts.salary.data.labels = labels;
             this.charts.salary.data.datasets[0].data = yearData.map(d => d.gross);
             this.charts.salary.data.datasets[1].data = yearData.map(d => d.net);
-            this.charts.salary.data.datasets[2].data = yearData.map(d => d.deductions.tax + d.deductions.pension + d.deductions.insurance);
+            this.charts.salary.data.datasets[2].data = deductionsData;
             this.charts.salary.update('none');
         } else {
             this._createMainSalaryChart(document.getElementById('mainSalaryChart').getContext('2d'), yearData);
@@ -45,11 +57,15 @@ const ChartManager = {
     },
 
     _getColor(varName) {
-        return getComputedStyle(document.body).getPropertyValue(varName).trim() || '#666';
+        if (!this._colorCache[varName]) {
+            this._colorCache[varName] = getComputedStyle(document.body).getPropertyValue(varName).trim() || '#666';
+        }
+        return this._colorCache[varName];
     },
 
     _createMainSalaryChart(ctx, yearData) {
         const labels = this._monthLabels(yearData);
+        const deductionsData = yearData.map(d => d.total_deductions || Math.max(0, d.gross - d.net));
 
         this.charts.salary = new Chart(ctx, {
             type: 'bar',
@@ -57,22 +73,22 @@ const ChartManager = {
                 labels: labels,
                 datasets: [
                     {
-                        label: typeof I18n !== 'undefined' ? I18n.t('chartGross') : 'Gross Salary',
+                        label: this._t('chartGross', 'Gross Salary'),
                         data: yearData.map(d => d.gross),
                         backgroundColor: this._getColor('--blue'),
                         borderRadius: 6,
                         barThickness: 20,
                     },
                     {
-                        label: typeof I18n !== 'undefined' ? I18n.t('chartNet') : 'Net Salary',
+                        label: this._t('chartNet', 'Net Salary'),
                         data: yearData.map(d => d.net),
                         backgroundColor: this._getColor('--green'),
                         borderRadius: 6,
                         barThickness: 20,
                     },
                     {
-                        label: typeof I18n !== 'undefined' ? I18n.t('chartDeductions') : 'Deductions',
-                        data: yearData.map(d => d.deductions.tax + d.deductions.pension + d.deductions.insurance),
+                        label: this._t('chartDeductions', 'Deductions'),
+                        data: deductionsData,
                         backgroundColor: this._getColor('--red'),
                         borderRadius: 6,
                         barThickness: 20,
@@ -131,7 +147,7 @@ const ChartManager = {
         this.charts.earnings = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: typeof I18n !== 'undefined' ? [I18n.t('chartBase'), I18n.t('chartBonus'), I18n.t('chartOvertime')] : ['Base', 'Bonus', 'Overtime'],
+                labels: [this._t('chartBase', 'Base'), this._t('chartBonus', 'Bonus'), this._t('chartOvertime', 'Overtime')],
                 datasets: [{
                     data: [totals.base, totals.bonus, totals.overtime],
                     backgroundColor: [this._getColor('--blue'), this._getColor('--cyan'), this._getColor('--orange')],
@@ -159,7 +175,7 @@ const ChartManager = {
         this.charts.deductions = new Chart(ctx, {
             type: 'pie',
             data: {
-                labels: typeof I18n !== 'undefined' ? [I18n.t('chartTax'), I18n.t('chartPension'), I18n.t('chartInsurance')] : ['Tax', 'Pension', 'Insurance'],
+                labels: [this._t('chartTax', 'Tax'), this._t('chartPension', 'Pension'), this._t('chartInsurance', 'Insurance')],
                 datasets: [{
                     data: [totals.tax, totals.pension, totals.insurance],
                     backgroundColor: [this._getColor('--red'), this._getColor('--orange'), this._getColor('--cyan')],
@@ -219,13 +235,13 @@ const ChartManager = {
                 labels: sortedData.map(d => d.year),
                 datasets: [
                     {
-                        label: typeof I18n !== 'undefined' ? I18n.t('chartTotalGross') : 'Total Gross',
+                        label: this._t('chartTotalGross', 'Total Gross'),
                         data: sortedData.map(d => d.totalGross),
                         backgroundColor: this._getColor('--blue'),
                         borderRadius: 8,
                     },
                     {
-                        label: typeof I18n !== 'undefined' ? I18n.t('totalNet') : 'Total Net',
+                        label: this._t('totalNet', 'Total Net'),
                         data: sortedData.map(d => d.totalNet),
                         backgroundColor: this._getColor('--green'),
                         borderRadius: 8,
@@ -248,7 +264,7 @@ const ChartManager = {
         this.charts.lifetimeComp = new Chart(ctx, {
             type: 'doughnut',
             data: {
-                labels: typeof I18n !== 'undefined' ? [I18n.t('netIncome'), I18n.t('deductions')] : ['Net Income', 'Deductions'],
+                labels: [this._t('netIncome', 'Net Income'), this._t('deductions', 'Deductions')],
                 datasets: [{
                     data: [lifetimeTotals.net, lifetimeTotals.deductions],
                     backgroundColor: [this._getColor('--green'), this._getColor('--red')],
@@ -275,7 +291,7 @@ const ChartManager = {
             data: {
                 labels: sortedData.map(d => d.year),
                 datasets: [{
-                    label: typeof I18n !== 'undefined' ? I18n.t('chartAvgNet') : 'Avg Monthly Net',
+                    label: this._t('chartAvgNet', 'Avg Monthly Net'),
                     data: sortedData.map(d => d.avgMonthly),
                     borderColor: this._getColor('--cyan'),
                     backgroundColor: 'transparent',

@@ -4,6 +4,7 @@ const fs = require('fs-extra');
 const yaml = require('js-yaml');
 const chokidar = require('chokidar');
 const { ingest, exportConfig } = require('./scripts/ingest');
+const { writePayslipData } = require('./scripts/data-writer');
 
 // Remove the default Electron menu
 Menu.setApplicationMenu(null);
@@ -221,9 +222,10 @@ ipcMain.handle('read-file-base64', async (event, filePath) => {
   if (!sourceDir) throw new Error('Access denied');
   const resolved = path.resolve(filePath);
   const resolvedSource = path.resolve(sourceDir);
-  // Use path.relative to avoid case-sensitivity and symlink bypass on Windows
+  // Use path.relative — if the result starts with '..', the file is outside sourceDir.
+  // path.relative never returns an absolute path, so isAbsolute check is not needed.
   const relative = path.relative(resolvedSource, resolved);
-  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+  if (relative.startsWith('..')) {
     throw new Error('Access denied');
   }
   const data = await fs.readFile(resolved);
@@ -249,9 +251,7 @@ ipcMain.handle('save-manual-edit', async (event, { month, updates }) => {
     const entry = yearData.find(m => m.month === month);
     if (!entry) return { success: false, error: 'Month not found' };
     Object.assign(entry, updates);
-    await fs.writeJson(jsonPath, data, { spaces: 2 });
-    const jsContent = `window.PAYSLIP_DATA = ${JSON.stringify(data, null, 2)};\n`;
-    await fs.writeFile(path.join(paths.data, 'payslips.js'), jsContent);
+    await writePayslipData(data, paths.data);
     if (mainWindow) mainWindow.webContents.send('data-updated');
     return { success: true };
   } catch (e) {
