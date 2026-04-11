@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-const { extractDataFromText } = require('../../scripts/ingest');
+const { extractDataFromText } = require('../../scripts/finance-parser');
 
 describe('Payslip Ingestion Pipeline', () => {
     it('should correctly parse Hebrew keywords from text sample', async () => {
