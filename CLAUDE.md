@@ -83,3 +83,15 @@ Month is derived from PDF text first (Hebrew and English month names supported),
 - `test/unit/` — Vitest unit tests for `DataManager`, `ChartManager`, `UIManager`, `App`, and `ingest.js`
 - `test/e2e/` — Playwright tests for full UI flows (served via `npm run dev`)
 - `test/fixtures/payslips_source/` — sample PDFs for ingest tests
+
+## Security Conventions
+
+**Path validation** — always use `path.relative(resolvedBase, resolved)` to guard file-serving; check `relative.startsWith('..') || path.isAbsolute(relative)`. Never use `startsWith()` string comparison (breaks on Windows case folding).
+
+**Month parameters** — validate with `/^\d{4}-\d{2}$/.test(month)` before use in IPC handlers (`main.js`) and Express endpoints (`server.js`).
+
+**innerHTML** — user-originated or OCR-derived strings must use `textContent` or be escaped with the `_escHtml()` helper in `app.js` before interpolation into HTML.
+
+**`runIngestion()` calls** — always append `.catch(err => console.error(...))` at fire-and-forget call sites; the function handles its own errors internally but unhandled rejections still surface without a catch.
+
+**Express CSRF** — `server.js` has a localhost-only `Origin`/`Referer` guard middleware for all mutating methods. Keep it in place when adding new endpoints.
