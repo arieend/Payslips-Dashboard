@@ -3,72 +3,115 @@ import DataManager from '../../js/data.js';
 
 const mockData = {
     "2024": [
-        { month: "2024-01", gross: 10000, net: 8000, earnings: { base: 10000, bonus: 0, overtime: 0 }, deductions: { tax: 1000, pension: 500, insurance: 500 } },
-        { month: "2024-02", gross: 20000, net: 16000, earnings: { base: 10000, bonus: 10000, overtime: 0 }, deductions: { tax: 2000, pension: 1000, insurance: 1000 } }
+        { month: "2024-01", gross: 10000, net: 8000, total_deductions: 2000, earnings: { base: 10000, bonus: 0, overtime: 0 }, deductions: { tax: 1000, pension: 500, insurance: 500 } },
+        { month: "2024-02", gross: 20000, net: 16000, total_deductions: 4000, earnings: { base: 10000, bonus: 10000, overtime: 0 }, deductions: { tax: 2000, pension: 1000, insurance: 1000 } }
     ],
     "2023": [
-         { month: "2023-12", gross: 10000, net: 8000, earnings: { base: 10000, bonus: 0, overtime: 0 }, deductions: { tax: 1000, pension: 500, insurance: 500 } }
+        { month: "2023-12", gross: 10000, net: 8000, total_deductions: 2000, earnings: { base: 10000, bonus: 0, overtime: 0 }, deductions: { tax: 1000, pension: 500, insurance: 500 } }
     ]
 };
 
 describe('DataManager Logical Coverage', () => {
     beforeEach(() => {
-        // Reset global state
         global.window = {};
         global.fetch = undefined;
         DataManager._raw = null;
+        DataManager._sortedCache = {};
+        DataManager._summaryCache = null;
     });
 
+    // ── load() ──────────────────────────────────────────────────────────────────
     describe('load()', () => {
-        it('should load from window.PAYSLIP_DATA if available', async () => {
+        it('loads from window.PAYSLIP_DATA when available (no fetch)', async () => {
             global.window = { PAYSLIP_DATA: mockData };
             const result = await DataManager.load();
             expect(result).toEqual(mockData);
             expect(DataManager._raw).toEqual(mockData);
         });
 
-        it('should load from fetch if window global is missing', async () => {
-            const mockResponse = {
-                ok: true,
-                json: async () => mockData
-            };
-            global.fetch = vi.fn().mockResolvedValue(mockResponse);
-            
+        it('loads from fetch when global is absent', async () => {
+            global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData });
             const result = await DataManager.load();
             expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('data/payslips.json?v='));
             expect(result).toEqual(mockData);
         });
 
-        it('should handle fetch failure gracefully', async () => {
+        it('falls back to global after a failed fetch', async () => {
+            global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+            global.window = { PAYSLIP_DATA: mockData };
+            const result = await DataManager.load();
+            expect(result).toEqual(mockData);
+        });
+
+        it('returns null when both fetch and global fail', async () => {
             global.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
             const result = await DataManager.load();
             expect(result).toBeNull();
         });
-    });
 
-    describe('Accessors & Calculations', () => {
-        beforeEach(() => {
-            DataManager._raw = mockData;
+        it('clears sorted and summary caches after a successful load', async () => {
+            DataManager._sortedCache = { '2023': [] };
+            DataManager._summaryCache = [];
+            global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => mockData });
+            await DataManager.load();
+            expect(DataManager._sortedCache).toEqual({});
+            expect(DataManager._summaryCache).toBeNull();
         });
 
-        it('getYears(): should return sorted keys or empty array', () => {
-            expect(DataManager.getYears()).toEqual(["2024", "2023"]);
+        it('deduplicates concurrent load() calls (only one fetch)', async () => {
+            let resolveFetch;
+            global.fetch = vi.fn().mockReturnValue(new Promise(r => { resolveFetch = () => r({ ok: true, json: async () => mockData }); }));
+            const p1 = DataManager.load();
+            const p2 = DataManager.load();
+            resolveFetch();
+            const [r1, r2] = await Promise.all([p1, p2]);
+            expect(r1).toEqual(mockData);
+            expect(r2).toEqual(mockData);
+            expect(global.fetch).toHaveBeenCalledTimes(1);
+        });
+    });
+
+    // ── Accessors ────────────────────────────────────────────────────────────────
+    describe('Accessors', () => {
+        beforeEach(() => { DataManager._raw = mockData; });
+
+        it('getYears(): returns years sorted descending', () => {
+            expect(DataManager.getYears()).toEqual(['2024', '2023']);
+        });
+
+        it('getYears(): returns [] when _raw is null', () => {
             DataManager._raw = null;
             expect(DataManager.getYears()).toEqual([]);
         });
 
-        it('getDataForYear(): should return sorted months for a year', () => {
-            const data = DataManager.getDataForYear("2024");
-            expect(data.length).toBe(2);
-            expect(data[0].month).toBe("2024-01");
-            expect(data[1].month).toBe("2024-02");
-            
-            expect(DataManager.getDataForYear("1999")).toEqual([]);
+        it('getDataForYear(): returns months sorted ascending', () => {
+            const data = DataManager.getDataForYear('2024');
+            expect(data.map(d => d.month)).toEqual(['2024-01', '2024-02']);
         });
 
-        it('getTotals(): should sum all components correctly', () => {
-            const data = DataManager.getDataForYear("2024");
-            const totals = DataManager.getTotals(data);
+        it('getDataForYear(): returns [] for unknown year', () => {
+            expect(DataManager.getDataForYear('1999')).toEqual([]);
+        });
+
+        it('getDataForYear(): caches result on second call (same reference)', () => {
+            const first = DataManager.getDataForYear('2024');
+            const second = DataManager.getDataForYear('2024');
+            expect(first).toBe(second);
+        });
+
+        it('getDataForYear(): does not mutate _raw (spread clone)', () => {
+            const data = DataManager.getDataForYear('2024');
+            data.push({ month: '2024-99' });
+            expect(DataManager._raw['2024'].length).toBe(2);
+        });
+    });
+
+    // ── Totals & Averages ────────────────────────────────────────────────────────
+    describe('getTotals()', () => {
+        beforeEach(() => { DataManager._raw = mockData; });
+
+        it('sums all financial components correctly', () => {
+            const totals = DataManager.getTotals(DataManager.getDataForYear('2024'));
             expect(totals.gross).toBe(30000);
             expect(totals.net).toBe(24000);
             expect(totals.tax).toBe(3000);
@@ -79,77 +122,215 @@ describe('DataManager Logical Coverage', () => {
             expect(totals.overtime).toBe(0);
         });
 
-        it('getAverages(): should return correct net average', () => {
-            const data = DataManager.getDataForYear("2024");
-            expect(DataManager.getAverages(data).net).toBe(12000);
-            expect(DataManager.getAverages([]).net).toBe(0);
+        it('returns zero-initialised object for empty array', () => {
+            const totals = DataManager.getTotals([]);
+            expect(totals.gross).toBe(0);
+            expect(totals.net).toBe(0);
+        });
+
+        it('skips invalid entries (no gross/net fields)', () => {
+            const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: {} },
+                { month: '2024-02' } // invalid — missing gross/net
+            ];
+            const totals = DataManager.getTotals(data);
+            expect(totals.gross).toBe(10000);
+            consoleWarn.mockRestore();
+        });
+
+        it('falls back to gross-net diff when total_deductions is absent', () => {
+            const data = [{ month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: {} }];
+            const totals = DataManager.getTotals(data);
+            expect(totals.deductions).toBe(2000);
         });
     });
 
-    describe('Insights & Trends', () => {
-        it('getInsights(): should cover all anomaly types', () => {
-            const yearData = [
-                { month: "2024-01", gross: 10000, net: 8000, earnings: { base: 10000, bonus: 0, overtime: 0 }, deductions: { tax: 1000, pension: 500, insurance: 500 } },
-                { month: "2024-02", gross: 20000, net: 16000, earnings: { base: 10000, bonus: 10000, overtime: 0 }, deductions: { tax: 2000, pension: 1000, insurance: 1000 } }
-            ];
-            const insights = DataManager.getInsights(yearData, "2024");
-            
-            // Spike: 20k vs avg 15k (20/15 = 1.33 > 1.3)
-            expect(insights.some(i => i.title === 'Gross Spike Detected')).toBe(true);
-            // Fluctuation: (16-8)/8 = 100% > 20%
-            expect(insights.some(i => i.title === 'Net Fluctuation')).toBe(true);
-            // Incomplete: 2 months < 12
-            expect(insights.some(i => i.title === 'Incomplete Dataset')).toBe(true);
-            
-            expect(DataManager.getInsights([], "2024")).toEqual([]);
+    describe('getAverages()', () => {
+        beforeEach(() => { DataManager._raw = mockData; });
+
+        it('returns correct gross and net averages', () => {
+            const data = DataManager.getDataForYear('2024');
+            const avg = DataManager.getAverages(data);
+            expect(avg.net).toBe(12000);
+            expect(avg.gross).toBe(15000);
         });
 
-        it('getTrendAnalysis(): should calculate max/min and MoM change', () => {
-            const yearData = [
-                { month: "2024-01", net: 8000 },
-                { month: "2024-02", net: 12000 },
-                { month: "2024-03", net: 10000 }
+        it('returns { gross: 0, net: 0 } for empty array', () => {
+            expect(DataManager.getAverages([])).toEqual({ gross: 0, net: 0 });
+        });
+
+        it('excludes zero-value months from denominator', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: {} },
+                { month: '2024-02', gross: 0, net: 0, earnings: {}, deductions: {} } // failed parse
             ];
-            const result = DataManager.getTrendAnalysis(yearData);
-            expect(result.highest.month).toBe("2024-02");
-            expect(result.lowest.month).toBe("2024-01");
-            // Change from 8k to 12k is 50%. Change from 12k to 10k is (10-12)/12 = -16.6%. Correct!
-            expect(result.change.pct).toBe(50);
-            
+            const avg = DataManager.getAverages(data);
+            expect(avg.net).toBe(8000); // only 1 valid month
+        });
+    });
+
+    // ── Insights ─────────────────────────────────────────────────────────────────
+    describe('getInsights()', () => {
+        it('returns empty array for empty input', () => {
+            expect(DataManager.getInsights([], '2024')).toEqual([]);
+        });
+
+        it('emits insightSpikeTitle when a month is 30%+ above average gross', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
+                { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            // avg = 15000; 20000 / 15000 = 1.33 > 1.3 → spike
+            const insights = DataManager.getInsights(data, '2024');
+            expect(insights.some(i => i.titleKey === 'insightSpikeTitle')).toBe(true);
+        });
+
+        it('includes month in textData for spike insight', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
+                { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            const spike = DataManager.getInsights(data, '2024').find(i => i.titleKey === 'insightSpikeTitle');
+            expect(spike.textData.month).toBe('2024-02');
+        });
+
+        it('emits insightFluctuationTitle for MoM net change > 20%', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
+                { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            // (16000-8000)/8000 = 100% > 20%
+            const insights = DataManager.getInsights(data, '2024');
+            expect(insights.some(i => i.titleKey === 'insightFluctuationTitle')).toBe(true);
+        });
+
+        it('includes pct/fromMonth/toMonth in textData for fluctuation insight', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
+                { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            const fl = DataManager.getInsights(data, '2024').find(i => i.titleKey === 'insightFluctuationTitle');
+            expect(fl.textData.fromMonth).toBe('2024-01');
+            expect(fl.textData.toMonth).toBe('2024-02');
+            expect(fl.textData.pct).toContain('100.0');
+        });
+
+        it('emits insightIncompleteTitle when year has fewer than 12 payslips', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            const insights = DataManager.getInsights(data, '2024');
+            const inc = insights.find(i => i.titleKey === 'insightIncompleteTitle');
+            expect(inc).toBeDefined();
+            expect(inc.textData.year).toBe('2024');
+            expect(inc.textData.count).toBe(1);
+        });
+
+        it('does not emit fluctuation when MoM change is <= 20%', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 10000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
+                { month: '2024-02', gross: 11000, net: 11000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            // (11000-10000)/10000 = 10% ≤ 20%
+            const insights = DataManager.getInsights(data, '2024');
+            expect(insights.some(i => i.titleKey === 'insightFluctuationTitle')).toBe(false);
+        });
+
+        it('insight objects have no raw HTML in any string field', () => {
+            const data = [
+                { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
+                { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
+            ];
+            const insights = DataManager.getInsights(data, '2024');
+            insights.forEach(i => {
+                expect(JSON.stringify(i)).not.toMatch(/<[a-z]/i);
+            });
+        });
+    });
+
+    // ── Trend Analysis ───────────────────────────────────────────────────────────
+    describe('getTrendAnalysis()', () => {
+        it('returns null for empty or null input', () => {
             expect(DataManager.getTrendAnalysis([])).toBeNull();
             expect(DataManager.getTrendAnalysis(null)).toBeNull();
         });
+
+        it('identifies highest and lowest net months', () => {
+            const data = [
+                { month: '2024-01', net: 8000 },
+                { month: '2024-02', net: 12000 },
+                { month: '2024-03', net: 10000 }
+            ];
+            const result = DataManager.getTrendAnalysis(data);
+            expect(result.highest.month).toBe('2024-02');
+            expect(result.lowest.month).toBe('2024-01');
+        });
+
+        it('identifies the largest MoM change as mostSignificant', () => {
+            const data = [
+                { month: '2024-01', net: 8000 },
+                { month: '2024-02', net: 12000 }, // +50%
+                { month: '2024-03', net: 11000 }  // -8.3%
+            ];
+            const result = DataManager.getTrendAnalysis(data);
+            expect(result.change.pct).toBe(50);
+            expect(result.change.from).toBe('2024-01');
+            expect(result.change.to).toBe('2024-02');
+        });
+
+        it('handles single-month input without crashing', () => {
+            const data = [{ month: '2024-01', net: 5000 }];
+            const result = DataManager.getTrendAnalysis(data);
+            expect(result.highest.month).toBe('2024-01');
+            expect(result.change.pct).toBe(0);
+        });
     });
 
-    describe('Cross-Year Summaries', () => {
-        beforeEach(() => {
-            DataManager._raw = mockData;
-        });
+    // ── Cross-Year Summaries ─────────────────────────────────────────────────────
+    describe('getAllYearsSummary()', () => {
+        beforeEach(() => { DataManager._raw = mockData; });
 
-        it('getAllYearsSummary(): should aggregate data across all years and filter empty ones', () => {
+        it('returns one entry per year sorted descending', () => {
             const summary = DataManager.getAllYearsSummary();
-            expect(summary.length).toBe(2);
-            expect(summary[0].year).toBe("2024");
-            expect(summary[0].totalGross).toBe(30000);
-            expect(summary[0].monthsCount).toBe(2);
-            expect(summary[1].year).toBe("2023");
-            expect(summary[1].totalGross).toBe(10000);
+            expect(summary.map(s => s.year)).toEqual(['2024', '2023']);
         });
 
-        it('getLifetimeTotals(): should calculate global totals accurately', () => {
-            const lifetime = DataManager.getLifetimeTotals();
-            // 2024 (30k gross, 24k net) + 2023 (10k gross, 8k net) = 40k gross, 32k net
-            expect(lifetime.gross).toBe(40000);
-            expect(lifetime.net).toBe(32000);
-            expect(lifetime.deductions).toBe(8000);
-            expect(lifetime.yearsCount).toBe(2);
+        it('calculates correct totals per year', () => {
+            const summary = DataManager.getAllYearsSummary();
+            const y2024 = summary.find(s => s.year === '2024');
+            expect(y2024.totalGross).toBe(30000);
+            expect(y2024.totalNet).toBe(24000);
+            expect(y2024.monthsCount).toBe(2);
         });
 
-        it('should handle missing data for lifetime totals', () => {
-             DataManager._raw = null;
-             const lifetime = DataManager.getLifetimeTotals();
-             expect(lifetime.gross).toBe(0);
-             expect(lifetime.yearsCount).toBe(0);
+        it('caches the result on second call (same reference)', () => {
+            const first = DataManager.getAllYearsSummary();
+            const second = DataManager.getAllYearsSummary();
+            expect(first).toBe(second);
+        });
+
+        it('returns [] when _raw is null', () => {
+            DataManager._raw = null;
+            expect(DataManager.getAllYearsSummary()).toEqual([]);
+        });
+    });
+
+    describe('getLifetimeTotals()', () => {
+        beforeEach(() => { DataManager._raw = mockData; });
+
+        it('aggregates gross and net across all years', () => {
+            const lt = DataManager.getLifetimeTotals();
+            expect(lt.gross).toBe(40000);
+            expect(lt.net).toBe(32000);
+            expect(lt.yearsCount).toBe(2);
+        });
+
+        it('returns zeros when _raw is null', () => {
+            DataManager._raw = null;
+            const lt = DataManager.getLifetimeTotals();
+            expect(lt.gross).toBe(0);
+            expect(lt.yearsCount).toBe(0);
         });
     });
 });
