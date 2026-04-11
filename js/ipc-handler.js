@@ -1,6 +1,7 @@
 /**
  * Electron IPC Handler
  * Connects the dashboard UI to the Electron Main process.
+ * In browser dev mode (npm run dev) falls back to the Express REST API.
  */
 
 const IPCHandler = {
@@ -9,17 +10,14 @@ const IPCHandler = {
   init() {
     if (!this.isEnabled) return;
 
-    // Listen for status updates
     window.electron.onIngestStatus((event, data) => {
       this.updateStatusUI(data.status, data.message);
     });
 
-    // Listen for per-file progress
     window.electron.onIngestProgress((event, data) => {
       this.updateProgressUI(data);
     });
 
-    // Listen for data updates -> Refresh dashboard
     window.electron.onDataUpdated(() => {
       console.log('Data updated in background. Refreshing dashboard...');
       if (window.app && window.app.loadData) {
@@ -29,11 +27,10 @@ const IPCHandler = {
       }
     });
 
-    // Listen for open-settings signal (e.g. first run — no config file found)
     window.electron.onOpenSettings(() => {
       if (typeof UIManager !== 'undefined') UIManager.openSettings();
     });
-    
+
     this.createStatusUI();
   },
 
@@ -42,32 +39,27 @@ const IPCHandler = {
     const result = await window.electron.selectFolder();
     if (result.success) {
       console.log('New source folder selected:', result.path);
-      return result;
     }
     return result;
   },
 
   async updatePath(newPath) {
-    if (!this.isEnabled) return { success: false };
-    const result = await window.electron.updatePath(newPath);
-    if (result.success) {
+    if (this.isEnabled) {
+      const result = await window.electron.updatePath(newPath);
+      if (!result.success) throw new Error(result.error || 'Failed to update path');
       console.log('Path updated via manual input:', result.path);
       return result;
+    } else {
+      // Browser dev mode: POST to Express config endpoint
+      const res = await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ parentDirectoryPath: newPath })
+      });
+      const result = await res.json();
+      if (!result.success) throw new Error(result.error || 'Failed to update path');
+      return result;
     }
-    throw new Error('Failed to update path');
-  },
-
-  // Send a POST to the REST API (browser mode) or invoke an IPC channel (Electron mode).
-  async _makeRequest(ipcMethod, ipcArgs, endpoint, body) {
-    if (this.isEnabled) {
-      return ipcMethod(...ipcArgs);
-    }
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-    return response.json();
   },
 
   async syncNow() {
@@ -76,7 +68,8 @@ const IPCHandler = {
     } else {
       console.log('[IPCHandler] Non-electron mode. Calling server ingestion API...');
       try {
-        const result = await this._makeRequest(null, [], '/api/ingest', {});
+        const response = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+        const result = await response.json();
         if (result.success) {
           console.log(`[IPCHandler] Server sync successful: ${result.count} items.`);
           if (window.app && window.app.loadData) await window.app.loadData();
@@ -90,17 +83,21 @@ const IPCHandler = {
   },
 
   async syncYear(year) {
-    await this._makeRequest(
-      () => window.electron.syncYear(year), [],
-      '/api/ingest', { year }
-    );
+    if (this.isEnabled) {
+      await window.electron.syncYear(year);
+    } else {
+      const res = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ year }) });
+      if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+    }
   },
 
   async syncMonth(year, month) {
-    await this._makeRequest(
-      () => window.electron.syncMonth({ year, month }), [],
-      '/api/ingest', { year, month }
-    );
+    if (this.isEnabled) {
+      await window.electron.syncMonth({ year, month });
+    } else {
+      const res = await fetch('/api/ingest', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ year, month }) });
+      if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
+    }
   },
 
   async saveManualEdit(month, updates) {
@@ -134,12 +131,12 @@ const IPCHandler = {
         <i data-lucide="folder-open"></i>
       </button>
     `;
-    
+
     header.appendChild(statusContainer);
-    
+
     document.getElementById('btn-sync-now').addEventListener('click', () => this.syncNow());
     document.getElementById('btn-settings').addEventListener('click', () => this.selectFolder());
-    
+
     if (window.lucide) lucide.createIcons();
   },
 

@@ -2,7 +2,7 @@ const App = {
     currentYear: null,
     allYears: [],
     _selectedComponent: 'all',
-    
+
     async init() {
         console.log('Initializing Payslip Infographic App...');
         await this.loadData();
@@ -19,7 +19,7 @@ const App = {
         }
 
         this.allYears = DataManager.getYears();
-        this.currentYear = 'summary'; 
+        this.currentYear = 'summary';
         UIManager.updateYearSelector(this.allYears, this.currentYear);
         this.render();
     },
@@ -31,7 +31,6 @@ const App = {
                 if (window.IPCHandler) {
                     try {
                         await window.IPCHandler.syncNow();
-                        // Browser mode: syncNow responds immediately, subscribe to SSE for progress
                         if (!window.electron) this._subscribeToIngestProgress();
                     } catch (e) {
                         console.error('[App] Sync failed:', e);
@@ -66,7 +65,6 @@ const App = {
             monthKeys.forEach((m, idx) => {
                 const opt = document.createElement('option');
                 opt.value = (idx + 1).toString().padStart(2, '0');
-                // Use locale-aware month name
                 const d = new Date(2000, idx, 1);
                 const locale = typeof I18n !== 'undefined' && I18n.lang === 'he' ? 'he-IL' : 'default';
                 opt.textContent = d.toLocaleString(locale, { month: 'long' });
@@ -96,7 +94,6 @@ const App = {
 
         // Re-render when language changes
         document.addEventListener('langchange', () => {
-            // Rebuild month filter options with new locale
             if (monthFilter) {
                 const selectedVal = monthFilter.value;
                 Array.from(monthFilter.options).slice(1).forEach((opt, idx) => {
@@ -106,7 +103,12 @@ const App = {
                 });
                 monthFilter.value = selectedVal;
             }
-            // Destroy charts so they are recreated with translated labels
+            ChartManager.destroyAll();
+            this.render();
+        });
+
+        // Re-render when theme changes (charts bake colors at creation time)
+        document.addEventListener('themechange', () => {
             ChartManager.destroyAll();
             this.render();
         });
@@ -121,57 +123,36 @@ const App = {
             saveSettingsBtn.addEventListener('click', async () => {
                 const input = document.getElementById('configPathInput');
                 const newPath = input.value.trim();
-                const currentStatus = (window.APP_CONFIG && window.APP_CONFIG.parentDirectoryPath) || localStorage.getItem('payslip_source_path') || '';
-                
+
                 const _i = typeof I18n !== 'undefined' ? I18n : null;
                 if (!newPath) {
                     UIManager.showToast(_i ? _i.t('toastPathEmpty') : 'Path cannot be empty!', 'alert-triangle');
                     return;
                 }
-                // Require an absolute path (Windows: C:\... or \\server, Unix: /)
                 if (!/^([A-Za-z]:[\\\/]|\\\\|\/)/i.test(newPath)) {
                     UIManager.showToast(_i ? _i.t('toastPathAbsolute') : 'Please provide an absolute path (e.g. C:\\Payslips)', 'alert-triangle');
                     return;
                 }
 
-                // Show loading state
                 const originalText = saveSettingsBtn.textContent;
                 saveSettingsBtn.disabled = true;
                 saveSettingsBtn.textContent = _i ? _i.t('toastPathUpdating') : 'Updating...';
 
                 try {
-                    if (window.IPCHandler && window.IPCHandler.isEnabled) {
-                        const result = await window.IPCHandler.updatePath(newPath);
-                        if (result.success) {
-                            UIManager.showToast(_i ? _i.t('toastPathUpdated') : 'Folder path updated successfully!', 'check-circle');
-                            // Update local state if available
-                            if (window.APP_CONFIG) window.APP_CONFIG.parentDirectoryPath = newPath;
-                        }
-                    } else {
-                        // Browser dev mode (npm run dev)
-                        console.log('[App] Saving browser-mode path:', newPath);
-                        const res = await fetch('/api/config', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ parentDirectoryPath: newPath })
-                        });
-                        const result = await res.json();
-                        if (result.success) {
-                            UIManager.showToast(_i ? _i.t('toastPathUpdatedBrowser') : 'Path updated! Ingestion running in background…', 'check-circle');
-                            if (!window.APP_CONFIG) window.APP_CONFIG = {};
-                            window.APP_CONFIG.parentDirectoryPath = newPath;
-                            localStorage.setItem('payslip_source_path', newPath);
-                            this._subscribeToIngestProgress();
-                        } else {
-                            UIManager.showToast((_i ? _i.t('toastPathFailed') : 'Server failed to save path: ') + (result.error || 'Unknown error'), 'alert-triangle');
-                        }
+                    await window.IPCHandler.updatePath(newPath);
+                    const toastKey = window.electron ? 'toastPathUpdated' : 'toastPathUpdatedBrowser';
+                    UIManager.showToast(_i ? _i.t(toastKey) : 'Folder path updated!', 'check-circle');
+                    if (!window.APP_CONFIG) window.APP_CONFIG = {};
+                    window.APP_CONFIG.parentDirectoryPath = newPath;
+                    if (!window.electron) {
+                        localStorage.setItem('payslip_source_path', newPath);
+                        this._subscribeToIngestProgress();
                     }
                     UIManager.closeSettings();
                 } catch (e) {
                     console.error('[App] Config update error:', e);
                     UIManager.showToast(_i ? _i.t('toastPathError') : 'Failed to update folder path. Please check if the path exists.', 'alert-triangle');
-                }
- finally {
+                } finally {
                     saveSettingsBtn.disabled = false;
                     saveSettingsBtn.textContent = originalText;
                 }
@@ -184,12 +165,16 @@ const App = {
     },
 
     render() {
-        if (this.currentYear === 'summary') {
-            UIManager.toggleView(true);
-            document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined' ? I18n.t('lifetimeSummary') : 'Lifetime Payslip Summary';
-            const summary = DataManager.getAllYearsSummary();
-            const lifetime = DataManager.getLifetimeTotals();
-            UIManager.renderAllYearsDashboard(summary, lifetime,
+        if (this.currentYear === 'summary') return this._renderSummary();
+        this._renderYear(this.currentYear);
+    },
+
+    _renderSummary() {
+        UIManager.toggleView(true);
+        document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined' ? I18n.t('lifetimeSummary') : 'Lifetime Payslip Summary';
+        const summary = DataManager.getAllYearsSummary();
+        const lifetime = DataManager.getLifetimeTotals();
+        UIManager.renderAllYearsDashboard(summary, lifetime,
             (year) => {
                 this.currentYear = year;
                 document.getElementById('yearSelect').value = year;
@@ -199,17 +184,17 @@ const App = {
                 await this._syncWithProgress(btn, () => window.IPCHandler.syncYear(year));
             }
         );
-            return;
-        }
+    },
 
+    _renderYear(year) {
         UIManager.toggleView(false);
-        const year = this.currentYear;
         const safeYear = this._escHtml(year);
         document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined'
             ? I18n.t('payslipOverview', { year: `<span>${safeYear}</span>` })
             : `<span>${safeYear}</span> Payslip Overview`;
-            
-        const filteredData = this.getFilteredData();
+
+        const monthFilterVal = document.getElementById('monthFilter').value;
+        const filteredData = this._getFilteredData(monthFilterVal);
         if (!filteredData || filteredData.length === 0) {
             UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastNoData') : 'No data available for ') + year, 'alert-circle');
             return;
@@ -217,17 +202,16 @@ const App = {
 
         const totals = DataManager.getTotals(filteredData);
         const averages = DataManager.getAverages(filteredData);
-        const insights = DataManager.getInsights(filteredData, this.currentYear);
-        const trends = DataManager.getTrendAnalysis(DataManager.getDataForYear(this.currentYear));
+        const insights = DataManager.getInsights(filteredData, year);
+        const trends = DataManager.getTrendAnalysis(DataManager.getDataForYear(year));
 
-        // Update UI
         UIManager.updateKPIs(totals, averages);
         UIManager.updateTrendAnalysis(trends);
         UIManager.updateAnomalies(insights);
         UIManager.updateMonthGrid(filteredData,
             async (month, btn) => {
-                const [year, mo] = month.month.split('-');
-                await this._syncWithProgress(btn, () => window.IPCHandler.syncMonth(year, mo));
+                const [yr, mo] = month.month.split('-');
+                await this._syncWithProgress(btn, () => window.IPCHandler.syncMonth(yr, mo));
             },
             async (monthKey, updates) => {
                 await window.IPCHandler.saveManualEdit(monthKey, updates);
@@ -236,14 +220,11 @@ const App = {
             }
         );
 
-        // Update Charts
         ChartManager.updateCharts(filteredData, totals);
 
-        // Component filter — sync from DOM (preserves direct DOM changes and test setup),
-        // then restore the DOM value to persist across year switches.
+        // Sync component filter state
         const componentFilter = document.getElementById('componentFilter');
         if (componentFilter) {
-            // Prefer DOM value if it was explicitly changed, otherwise restore persisted value
             if (componentFilter.value !== 'all') {
                 this._selectedComponent = componentFilter.value;
             } else if (this._selectedComponent !== 'all') {
@@ -297,7 +278,8 @@ const App = {
             const activePoints = salaryChart.getElementsAtEventForMode(evt, 'nearest', { intersect: true }, true);
             if (activePoints.length > 0) {
                 const index = activePoints[0].index;
-                const filteredData = this.getFilteredData();
+                const monthFilterVal = document.getElementById('monthFilter')?.value || 'all';
+                const filteredData = this._getFilteredData(monthFilterVal);
                 const monthData = filteredData[index];
                 if (monthData) {
                     UIManager.showMonthDetails(monthData);
@@ -306,17 +288,12 @@ const App = {
         };
     },
 
-    getFilteredData() {
+    _getFilteredData(monthFilterVal) {
         const fullYearData = DataManager.getDataForYear(this.currentYear);
-        let filteredData = [...fullYearData];
-        const monthFilterVal = document.getElementById('monthFilter').value;
-        if (monthFilterVal !== 'all') {
-            filteredData = filteredData.filter(d => d.month.includes(`-${monthFilterVal}`));
-        }
-        return filteredData;
+        if (!monthFilterVal || monthFilterVal === 'all') return [...fullYearData];
+        return fullYearData.filter(d => d.month.includes(`-${monthFilterVal}`));
     },
 
-    // Spin a button's icon while syncFn runs; handle errors and SSE subscription uniformly.
     async _syncWithProgress(btn, syncFn) {
         const icon = btn.querySelector('i, svg');
         icon.classList.add('spinning');
@@ -332,8 +309,6 @@ const App = {
         else this._subscribeToIngestProgress(done);
     },
 
-    // Browser-mode only: subscribe to SSE ingest progress stream.
-    // onDone: optional callback invoked when the stream closes (done or error).
     _subscribeToIngestProgress(onDone) {
         if (window.electron) { if (onDone) onDone(); return; }
         if (this._sseSource) { this._sseSource.close(); this._sseSource = null; }
@@ -342,7 +317,7 @@ const App = {
         const fill = document.getElementById('ingest-progress-fill');
         const label = document.getElementById('ingest-progress-label');
 
-        if (wrap) { wrap.classList.remove('hidden'); }
+        if (wrap) wrap.classList.remove('hidden');
         if (fill) fill.style.width = '0%';
         if (label) label.textContent = typeof I18n !== 'undefined' ? I18n.t('progressStarting') : 'Starting…';
 
@@ -370,7 +345,6 @@ const App = {
             }
             if (data.type === 'start' || data.type === 'connected') return;
 
-            // Per-file progress event
             if (fill && data.total > 0) {
                 fill.style.width = Math.round((data.current / data.total) * 100) + '%';
             }
@@ -399,10 +373,6 @@ if (typeof module !== 'undefined' && module.exports) {
 
 window.app = App;
 
-// Start the app
 window.addEventListener('DOMContentLoaded', () => {
     App.init();
 });
-
-// App.loadData is now part of the main App object above.
-// Legacy export removed for simplicity.

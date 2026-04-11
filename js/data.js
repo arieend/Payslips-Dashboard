@@ -1,7 +1,8 @@
 const DataManager = {
     _raw: null,
     _loadPromise: null,
-    _sortedYears: null,
+    _sortedCache: {},   // year → sorted month array; cleared on each load
+    _summaryCache: null, // getAllYearsSummary result; cleared on each load
 
     async load(forceFetch = false) {
         // Prevent concurrent fetches — queue behind the in-flight request
@@ -25,7 +26,8 @@ const DataManager = {
         // Only use global if not forcing a fresh fetch (e.g. background update)
         if (window.PAYSLIP_DATA && !forceFetch) {
             this._raw = window.PAYSLIP_DATA;
-            this._sortedYears = null;
+            this._sortedCache = {};
+            this._summaryCache = null;
             return this._raw;
         }
 
@@ -35,14 +37,16 @@ const DataManager = {
             const response = await fetch(`${baseUrl}data/payslips.json?v=${Date.now()}`);
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             this._raw = await response.json();
-            this._sortedYears = null;
+            this._sortedCache = {};
+            this._summaryCache = null;
             console.log('[DataManager] Data loaded from JSON file.');
             return this._raw;
         } catch (error) {
             console.warn('Fetch failed, trying global variable fallback...', error.message);
             this._raw = await getGlobalData();
             if (this._raw) {
-                this._sortedYears = null;
+                this._sortedCache = {};
+                this._summaryCache = null;
                 console.log('[DataManager] Data loaded from window.PAYSLIP_DATA fallback.');
                 return this._raw;
             }
@@ -52,16 +56,16 @@ const DataManager = {
 
     getYears() {
         if (!this._raw) return [];
-        if (!this._sortedYears) {
-            this._sortedYears = Object.keys(this._raw).sort((a, b) => b - a);
-        }
-        return this._sortedYears;
+        return Object.keys(this._raw).sort((a, b) => b - a);
     },
 
     getDataForYear(year) {
         if (!this._raw || !this._raw[year]) return [];
-        // Ensure sorted by month
-        return [...this._raw[year]].sort((a, b) => a.month.localeCompare(b.month));
+        // Cache sorted result — invalidated when _raw is replaced in _doLoad
+        if (!this._sortedCache[year]) {
+            this._sortedCache[year] = [...this._raw[year]].sort((a, b) => a.month.localeCompare(b.month));
+        }
+        return this._sortedCache[year];
     },
 
     getTotals(yearData) {
@@ -76,7 +80,7 @@ const DataManager = {
             acc.tax += (curr.deductions?.tax || 0);
             acc.pension += (curr.deductions?.pension || 0);
             acc.insurance += (curr.deductions?.insurance || 0);
-            
+
             // Total Deductions priority: 1. stored total, 2. calculated diff, 3. sum of parts
             const totalD = curr.total_deductions || (curr.gross > 0 && curr.net > 0 ? (curr.gross - curr.net) : 0);
             acc.deductions += totalD;
@@ -90,9 +94,10 @@ const DataManager = {
 
     getAverages(yearData) {
         const valid = yearData.filter(d => d.gross > 0 || d.net > 0);
-        if (valid.length === 0) return { net: 0 };
+        if (valid.length === 0) return { gross: 0, net: 0 };
         const totals = this.getTotals(valid);
         return {
+            gross: totals.gross / valid.length,
             net: totals.net / valid.length
         };
     },
@@ -102,7 +107,7 @@ const DataManager = {
         if (yearData.length === 0) return insights;
 
         const totals = this.getTotals(yearData);
-        
+
         // 1. Threshold-based Anomalies
         const avgGross = totals.gross / yearData.length;
         yearData.forEach(d => {
@@ -110,8 +115,9 @@ const DataManager = {
                 insights.push({
                     type: 'alert',
                     icon: 'alert-triangle',
-                    title: 'Gross Spike Detected',
-                    text: `<b>${d.month}</b> Gross Salary is 30%+ above average. Possibly Bonus/Grant related.`
+                    titleKey: 'insightSpikeTitle',
+                    textKey: 'insightSpikeText',
+                    textData: { month: d.month }
                 });
             }
         });
@@ -119,14 +125,16 @@ const DataManager = {
         // 2. Trend Anomalies (MoM changes > 20%)
         for (let i = 1; i < yearData.length; i++) {
             const curr = yearData[i];
-            const prev = yearData[i-1];
+            const prev = yearData[i - 1];
             const pct = prev.net !== 0 ? ((curr.net - prev.net) / prev.net) * 100 : 0;
             if (Math.abs(pct) > 20) {
+                const sign = pct > 0 ? '+' : '';
                 insights.push({
                     type: 'info',
                     icon: 'zap',
-                    title: 'Net Fluctuation',
-                    text: `Significant net pay change of <b>${pct.toFixed(1)}%</b> in ${curr.month} compared to ${prev.month}.`
+                    titleKey: 'insightFluctuationTitle',
+                    textKey: 'insightFluctuationText',
+                    textData: { pct: sign + pct.toFixed(1), toMonth: curr.month, fromMonth: prev.month }
                 });
             }
         }
@@ -136,8 +144,9 @@ const DataManager = {
             insights.push({
                 type: 'warning',
                 icon: 'file-warning',
-                title: 'Incomplete Dataset',
-                text: `Selected year <b>${year}</b> only has ${yearData.length} payslips processed.`
+                titleKey: 'insightIncompleteTitle',
+                textKey: 'insightIncompleteText',
+                textData: { year, count: yearData.length }
             });
         }
 
@@ -153,12 +162,12 @@ const DataManager = {
 
         for (let i = 0; i < yearData.length; i++) {
             const curr = yearData[i];
-            
+
             if (curr.net > highest.net) highest = curr;
             if (curr.net < lowest.net) lowest = curr;
 
             if (i > 0) {
-                const prev = yearData[i-1];
+                const prev = yearData[i - 1];
                 const pct = prev.net !== 0 ? ((curr.net - prev.net) / prev.net) * 100 : 0;
                 if (Math.abs(pct) > Math.abs(mostSignificant.pct)) {
                     mostSignificant = { pct, from: prev.month, to: curr.month };
@@ -166,14 +175,12 @@ const DataManager = {
             }
         }
 
-        return {
-            highest,
-            lowest,
-            change: mostSignificant
-        };
+        return { highest, lowest, change: mostSignificant };
     },
 
     getAllYearsSummary() {
+        if (this._summaryCache) return this._summaryCache;
+
         const years = this.getYears();
         const summary = [];
 
@@ -195,7 +202,8 @@ const DataManager = {
             }
         });
 
-        return summary.sort((a, b) => b.year - a.year);
+        this._summaryCache = summary.sort((a, b) => b.year - a.year);
+        return this._summaryCache;
     },
 
     getLifetimeTotals() {
@@ -206,7 +214,7 @@ const DataManager = {
             acc.deductions += curr.totalDeductions;
             return acc;
         }, { gross: 0, net: 0, deductions: 0 });
-        
+
         totals.yearsCount = summary.length;
         return totals;
     }

@@ -5,6 +5,7 @@ const ChartManager = {
     destroyAll() {
         Object.values(this.charts).forEach(c => { try { c.destroy(); } catch(e) {} });
         this.charts = {};
+        this._colorCache = {};
     },
 
     // Clear cached CSS variable values (call after theme switch)

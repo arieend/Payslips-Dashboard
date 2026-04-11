@@ -75,12 +75,13 @@ const UIManager = {
             header.appendChild(icon);
 
             const titleSpan = document.createElement('span');
-            titleSpan.textContent = insight.title;
+            const i18 = typeof I18n !== 'undefined' ? I18n : null;
+            titleSpan.textContent = i18 ? i18.t(insight.titleKey) : (insight.titleKey || insight.title || '');
             header.appendChild(titleSpan);
 
             const text = document.createElement('p');
             text.style.cssText = 'font-size:0.75rem; color:var(--text-secondary);';
-            text.textContent = insight.text;
+            text.textContent = i18 ? i18.t(insight.textKey, insight.textData) : (insight.textKey || insight.text || '');
 
             item.appendChild(header);
             item.appendChild(text);
@@ -524,6 +525,7 @@ document.addEventListener('DOMContentLoaded', () => {
         themeSwitch.addEventListener('change', (e) => {
             document.body.className = e.target.checked ? 'dark-mode' : 'light-mode';
             if (typeof ChartManager !== 'undefined') ChartManager._clearColorCache();
+            document.dispatchEvent(new CustomEvent('themechange'));
         });
     }
     const openBtn = document.getElementById('openSettings');
