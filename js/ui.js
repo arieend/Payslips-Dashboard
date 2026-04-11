@@ -34,9 +34,10 @@ const UIManager = {
         const mainTitle = this.getEl('mainTitle');
         if (mainTitle) {
             const i18 = typeof I18n !== 'undefined' ? I18n : null;
+            const safeYear = String(currentYear).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
             mainTitle.innerHTML = currentYear === 'summary'
                 ? (i18 ? i18.t('lifetimeSummary') : 'Lifetime Payslip Summary')
-                : (i18 ? i18.t('payslipOverview', { year: `<span id="displayYear">${currentYear}</span>` }) : `<span id="displayYear">${currentYear}</span> Payslip Overview`);
+                : (i18 ? i18.t('payslipOverview', { year: `<span id="displayYear">${safeYear}</span>` }) : `<span id="displayYear">${safeYear}</span> Payslip Overview`);
         }
     },
     updateTrendAnalysis(trend) {
@@ -55,15 +56,31 @@ const UIManager = {
     updateAnomalies(insights) {
         const list = this.getEl('anomalies-list');
         if (!list) return;
-        list.innerHTML = insights.map(insight => `
-            <div class="anomaly-item ${insight.type}">
-                <div style="display:flex; align-items:center; gap:0.5rem; font-weight:600; font-size:0.85rem; margin-bottom:0.3rem;">
-                    <i data-lucide="${insight.icon}" style="width:1rem;"></i>
-                    ${insight.title}
-                </div>
-                <p style="font-size:0.75rem; color:var(--text-secondary);">${insight.text}</p>
-            </div>
-        `).join('');
+        list.innerHTML = '';
+        insights.forEach(insight => {
+            const item = document.createElement('div');
+            item.className = `anomaly-item ${insight.type}`;
+
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex; align-items:center; gap:0.5rem; font-weight:600; font-size:0.85rem; margin-bottom:0.3rem;';
+
+            const icon = document.createElement('i');
+            icon.setAttribute('data-lucide', insight.icon || 'info');
+            icon.style.width = '1rem';
+            header.appendChild(icon);
+
+            const titleSpan = document.createElement('span');
+            titleSpan.textContent = insight.title;
+            header.appendChild(titleSpan);
+
+            const text = document.createElement('p');
+            text.style.cssText = 'font-size:0.75rem; color:var(--text-secondary);';
+            text.textContent = insight.text;
+
+            item.appendChild(header);
+            item.appendChild(text);
+            list.appendChild(item);
+        });
         this.refreshIcons();
     },
     updateMonthGrid(yearData, onMonthRefresh, onMonthEdit) {

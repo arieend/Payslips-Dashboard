@@ -175,6 +175,10 @@ const App = {
         }
     },
 
+    _escHtml(str) {
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    },
+
     render() {
         if (this.currentYear === 'summary') {
             UIManager.toggleView(true);
@@ -196,9 +200,10 @@ const App = {
 
         UIManager.toggleView(false);
         const year = this.currentYear;
+        const safeYear = this._escHtml(year);
         document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined'
-            ? I18n.t('payslipOverview', { year: `<span>${year}</span>` })
-            : `<span>${year}</span> Payslip Overview`;
+            ? I18n.t('payslipOverview', { year: `<span>${safeYear}</span>` })
+            : `<span>${safeYear}</span> Payslip Overview`;
             
         const filteredData = this.getFilteredData();
         if (!filteredData || filteredData.length === 0) {

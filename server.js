@@ -13,10 +13,28 @@ const sseClients = new Set();
 function broadcastProgress(data) {
     if (sseClients.size === 0) return;
     const msg = `data: ${JSON.stringify(data)}\n\n`;
-    sseClients.forEach(client => { try { client.write(msg); } catch (e) {} });
+    const failed = [];
+    sseClients.forEach(client => { try { client.write(msg); } catch (e) { failed.push(client); } });
+    failed.forEach(c => sseClients.delete(c));
 }
 
 app.use(express.json());
+
+// CSRF guard: only allow mutating requests from localhost (dev server is not internet-facing,
+// but a malicious page on another tab could still trigger cross-origin POSTs).
+app.use((req, res, next) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        const origin = req.headers.origin;
+        const referer = req.headers.referer;
+        if (origin && !origin.startsWith('http://localhost:') && !origin.startsWith('http://127.0.0.1:')) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+        if (!origin && referer && !referer.startsWith('http://localhost:') && !referer.startsWith('http://127.0.0.1:')) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+    }
+    next();
+});
 
 // Helper for absolute path resolution
 const resolvePath = (p) => path.isAbsolute(p) ? p : path.resolve(__dirname, p);
@@ -95,7 +113,9 @@ app.post('/api/config', async (req, res) => {
 app.post('/api/manual-edit', async (req, res) => {
     try {
         const { month, updates } = req.body;
-        if (!month || !updates) return res.status(400).json({ success: false, error: 'Invalid request' });
+        if (!month || !/^\d{4}-\d{2}$/.test(month) || !updates) {
+            return res.status(400).json({ success: false, error: 'Invalid request' });
+        }
         const year = month.split('-')[0];
         const jsonPath = path.join(__dirname, 'data', 'payslips.json');
         const data = await fs.readJson(jsonPath);
@@ -119,13 +139,16 @@ app.get('/api/source-file', (req, res) => {
         const filePath = req.query.path;
         if (!filePath) return res.status(400).end();
         const config = yaml.load(fs.readFileSync(CONFIG_PATH, 'utf8')) || {};
-        const sourceDir = (config.parentDirectoryPath || '').replace(/\\/g, '/');
-        const normalizedPath = filePath.replace(/\\/g, '/');
-        const normalizedSource = sourceDir.endsWith('/') ? sourceDir : sourceDir + '/';
-        if (!sourceDir || !normalizedPath.toLowerCase().startsWith(normalizedSource.toLowerCase())) {
+        const sourceDir = config.parentDirectoryPath;
+        if (!sourceDir) return res.status(403).end();
+        const resolved = path.resolve(filePath);
+        const resolvedSource = path.resolve(sourceDir);
+        // Use path.relative to avoid case-sensitivity/symlink bypass on Windows
+        const relative = path.relative(resolvedSource, resolved);
+        if (relative.startsWith('..') || path.isAbsolute(relative)) {
             return res.status(403).end();
         }
-        res.sendFile(filePath);
+        res.sendFile(resolved);
     } catch (e) {
         res.status(500).end();
     }

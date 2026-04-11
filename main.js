@@ -176,7 +176,7 @@ ipcMain.handle('select-folder', async () => {
     const newPath = result.filePaths[0];
     await writeConfigAtomic({ parentDirectoryPath: newPath });
     await setupWatcher();
-    runIngestion(); // fire-and-forget; progress tracked via ingest-status events
+    runIngestion().catch(err => console.error('[Main] Background ingestion error:', err));
     return { success: true, path: newPath };
   }
   return { success: false };
@@ -203,9 +203,15 @@ ipcMain.handle('update-path', async (event, newPath) => {
   if (!(await fs.pathExists(trimmed))) {
     return { success: false, error: 'Path does not exist' };
   }
+  try {
+    const stat = await fs.stat(trimmed);
+    if (!stat.isDirectory()) return { success: false, error: 'Path must be a directory' };
+  } catch {
+    return { success: false, error: 'Path is not accessible' };
+  }
   await writeConfigAtomic({ parentDirectoryPath: trimmed });
   await setupWatcher();
-  runIngestion(); // fire-and-forget; progress tracked via ingest-status events
+  runIngestion().catch(err => console.error('[Main] Background ingestion error:', err));
   return { success: true, path: trimmed };
 });
 
@@ -215,7 +221,9 @@ ipcMain.handle('read-file-base64', async (event, filePath) => {
   if (!sourceDir) throw new Error('Access denied');
   const resolved = path.resolve(filePath);
   const resolvedSource = path.resolve(sourceDir);
-  if (resolved !== resolvedSource && !resolved.startsWith(resolvedSource + path.sep)) {
+  // Use path.relative to avoid case-sensitivity and symlink bypass on Windows
+  const relative = path.relative(resolvedSource, resolved);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
     throw new Error('Access denied');
   }
   const data = await fs.readFile(resolved);
@@ -232,6 +240,7 @@ ipcMain.handle('get-config', async () => {
 
 ipcMain.handle('save-manual-edit', async (event, { month, updates }) => {
   try {
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) return { success: false, error: 'Invalid month format' };
     const jsonPath = path.join(paths.data, 'payslips.json');
     const data = await fs.readJson(jsonPath);
     const year = month.split('-')[0];
@@ -262,8 +271,14 @@ app.whenReady().then(async () => {
       // For standard schemes, host + pathname gives the full path relative to app-data://
       // Example: app-data://data/payslips.json -> host='data', pathname='/payslips.json'
       const urlPath = (url.host + url.pathname).replace(/^\/+/, '');
-      const filePath = path.join(baseDir, urlPath).replace(/\\/g, '/');
-      return net.fetch('file:///' + filePath);
+      const resolvedBase = path.resolve(baseDir);
+      const resolvedFile = path.resolve(baseDir, urlPath);
+      // Guard against path traversal (e.g. app-data://../../sensitive)
+      const relative = path.relative(resolvedBase, resolvedFile);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        return new Response('Not Found', { status: 404 });
+      }
+      return net.fetch('file:///' + resolvedFile.replace(/\\/g, '/'));
     } catch (e) {
       console.error('[Protocol] Error:', e);
       return new Response('Not Found', { status: 404 });
@@ -278,7 +293,7 @@ app.whenReady().then(async () => {
       const config = await readConfig();
       if (config.parentDirectoryPath && config.parentDirectoryPath.length > 5) {
          console.log('[Main] Valid config found. Initializing background sync...');
-         runIngestion();
+         runIngestion().catch(err => console.error('[Main] Startup ingestion error:', err));
       } else {
          console.log('[Main] Initial config is empty. Waiting for user setup.');
          mainWindow.webContents.once('did-finish-load', () => {
