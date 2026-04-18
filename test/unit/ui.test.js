@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+const flushAsync = () => new Promise(r => setTimeout(r, 0));
 import UIManager from '../../js/ui.js';
 
 const baseDOM = () => `
@@ -101,7 +103,6 @@ describe('UIManager', () => {
         });
 
         it('does nothing when trend is null', () => {
-            // Should not throw
             expect(() => UIManager.updateTrendAnalysis(null)).not.toThrow();
         });
     });
@@ -140,7 +141,6 @@ describe('UIManager', () => {
         it('renders title via i18n key (falls back to key when I18n absent)', () => {
             UIManager.updateAnomalies([structuredInsights[0]]);
             const item = document.querySelector('.anomaly-item');
-            // Title span textContent should contain the key or translated string — never HTML tags
             expect(item.querySelector('span').textContent).not.toMatch(/<[a-z]/i);
             expect(item.querySelector('span').textContent.length).toBeGreaterThan(0);
         });
@@ -270,7 +270,7 @@ describe('UIManager', () => {
             document.getElementById('editPension').value = '550';
             document.getElementById('editInsurance').value = '350';
             document.getElementById('editModalSaveBtn').click();
-            await new Promise(r => setTimeout(r, 0));
+            await flushAsync();
             expect(onSave).toHaveBeenCalledWith('2024-05', {
                 gross: 11000, net: 9000, total_deductions: 2000,
                 deductions: { tax: 1100, pension: 550, insurance: 350 }
@@ -281,7 +281,7 @@ describe('UIManager', () => {
             const onSave = vi.fn().mockRejectedValue(new Error('Server error'));
             UIManager.showEditModal(monthData, onSave);
             document.getElementById('editModalSaveBtn').click();
-            await new Promise(r => setTimeout(r, 0));
+            await flushAsync();
             expect(document.getElementById('editModal').classList.contains('hidden')).toBe(false);
         });
 
@@ -353,6 +353,8 @@ describe('UIManager', () => {
 
     // ── Settings ──────────────────────────────────────────────────────────────────
     describe('openSettings()', () => {
+        afterEach(() => { delete global.window.APP_CONFIG; });
+
         it('pre-fills configPathInput from APP_CONFIG', () => {
             global.window.APP_CONFIG = { parentDirectoryPath: '/test/path' };
             UIManager.openSettings();

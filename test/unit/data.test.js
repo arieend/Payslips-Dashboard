@@ -15,7 +15,7 @@ describe('DataManager Logical Coverage', () => {
     beforeEach(() => {
         global.window = {};
         global.fetch = undefined;
-        DataManager._raw = null;
+        DataManager._raw = mockData;
         DataManager._sortedCache = {};
         DataManager._summaryCache = null;
     });
@@ -73,8 +73,6 @@ describe('DataManager Logical Coverage', () => {
 
     // ── Accessors ────────────────────────────────────────────────────────────────
     describe('Accessors', () => {
-        beforeEach(() => { DataManager._raw = mockData; });
-
         it('getYears(): returns years sorted descending', () => {
             expect(DataManager.getYears()).toEqual(['2024', '2023']);
         });
@@ -108,8 +106,6 @@ describe('DataManager Logical Coverage', () => {
 
     // ── Totals & Averages ────────────────────────────────────────────────────────
     describe('getTotals()', () => {
-        beforeEach(() => { DataManager._raw = mockData; });
-
         it('sums all financial components correctly', () => {
             const totals = DataManager.getTotals(DataManager.getDataForYear('2024'));
             expect(totals.gross).toBe(30000);
@@ -147,8 +143,6 @@ describe('DataManager Logical Coverage', () => {
     });
 
     describe('getAverages()', () => {
-        beforeEach(() => { DataManager._raw = mockData; });
-
         it('returns correct gross and net averages', () => {
             const data = DataManager.getDataForYear('2024');
             const avg = DataManager.getAverages(data);
@@ -181,7 +175,6 @@ describe('DataManager Logical Coverage', () => {
                 { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
                 { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
             ];
-            // avg = 15000; 20000 / 15000 = 1.33 > 1.3 → spike
             const insights = DataManager.getInsights(data, '2024');
             expect(insights.some(i => i.titleKey === 'insightSpikeTitle')).toBe(true);
         });
@@ -200,7 +193,6 @@ describe('DataManager Logical Coverage', () => {
                 { month: '2024-01', gross: 10000, net: 8000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
                 { month: '2024-02', gross: 20000, net: 16000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
             ];
-            // (16000-8000)/8000 = 100% > 20%
             const insights = DataManager.getInsights(data, '2024');
             expect(insights.some(i => i.titleKey === 'insightFluctuationTitle')).toBe(true);
         });
@@ -232,7 +224,6 @@ describe('DataManager Logical Coverage', () => {
                 { month: '2024-01', gross: 10000, net: 10000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } },
                 { month: '2024-02', gross: 11000, net: 11000, earnings: {}, deductions: { tax: 0, pension: 0, insurance: 0 } }
             ];
-            // (11000-10000)/10000 = 10% ≤ 20%
             const insights = DataManager.getInsights(data, '2024');
             expect(insights.some(i => i.titleKey === 'insightFluctuationTitle')).toBe(false);
         });
@@ -289,8 +280,6 @@ describe('DataManager Logical Coverage', () => {
 
     // ── Cross-Year Summaries ─────────────────────────────────────────────────────
     describe('getAllYearsSummary()', () => {
-        beforeEach(() => { DataManager._raw = mockData; });
-
         it('returns one entry per year sorted descending', () => {
             const summary = DataManager.getAllYearsSummary();
             expect(summary.map(s => s.year)).toEqual(['2024', '2023']);
@@ -317,8 +306,6 @@ describe('DataManager Logical Coverage', () => {
     });
 
     describe('getLifetimeTotals()', () => {
-        beforeEach(() => { DataManager._raw = mockData; });
-
         it('aggregates gross and net across all years', () => {
             const lt = DataManager.getLifetimeTotals();
             expect(lt.gross).toBe(40000);

@@ -52,7 +52,7 @@ describe('ChartManager', () => {
             ChartManager.updateCharts(sampleData, sampleTotals);
             const originalSalary = ChartManager.charts.salary;
             ChartManager.updateCharts(sampleData, { ...sampleTotals, base: 200 });
-            expect(global.Chart).toHaveBeenCalledTimes(3); // still 3, no new creates
+            expect(global.Chart).toHaveBeenCalledTimes(3);
             expect(ChartManager.charts.salary).toBe(originalSalary);
         });
 
@@ -112,7 +112,6 @@ describe('ChartManager', () => {
         it('returns fresh value after cache is cleared by destroyAll()', () => {
             ChartManager._getColor('--blue');
             ChartManager.destroyAll();
-            // Override getComputedStyle to return different value after theme change
             global.getComputedStyle = vi.fn().mockReturnValue({ getPropertyValue: () => '#0000ff' });
             expect(ChartManager._getColor('--blue')).toBe('#0000ff');
         });

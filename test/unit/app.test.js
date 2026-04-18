@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const flushAsync = () => new Promise(r => setTimeout(r, 0));
 import App from '../../js/app.js';
 import DataManager from '../../js/data.js';
 import UIManager from '../../js/ui.js';
@@ -209,7 +211,6 @@ describe('App', () => {
         it('reads monthFilter.value inside _renderYear and filters correctly', () => {
             document.getElementById('monthFilter').value = '01';
             App._renderYear('2024');
-            // updateMonthGrid should receive only the January entry
             const [calledData] = vi.mocked(UIManager.updateMonthGrid).mock.calls[0];
             expect(calledData.length).toBe(1);
             expect(calledData[0].month).toBe('2024-01');
@@ -307,7 +308,7 @@ describe('App', () => {
             document.getElementById('configPathInput').value = '';
             App.setupEventListeners();
             document.getElementById('saveSettings').click();
-            await new Promise(r => setTimeout(r, 0));
+            await flushAsync();
             expect(global.IPCHandler.updatePath).not.toHaveBeenCalled();
             expect(UIManager.showToast).toHaveBeenCalledWith(expect.stringMatching(/empty/i), 'alert-triangle');
         });
@@ -316,7 +317,7 @@ describe('App', () => {
             document.getElementById('configPathInput').value = 'relative/path';
             App.setupEventListeners();
             document.getElementById('saveSettings').click();
-            await new Promise(r => setTimeout(r, 0));
+            await flushAsync();
             expect(global.IPCHandler.updatePath).not.toHaveBeenCalled();
             expect(UIManager.showToast).toHaveBeenCalledWith(expect.stringMatching(/absolute/i), 'alert-triangle');
         });
@@ -325,7 +326,7 @@ describe('App', () => {
             document.getElementById('configPathInput').value = 'C:\\Payslips';
             App.setupEventListeners();
             document.getElementById('saveSettings').click();
-            await new Promise(r => setTimeout(r, 0));
+            await flushAsync();
             expect(global.IPCHandler.updatePath).toHaveBeenCalledWith('C:\\Payslips');
         });
 
@@ -334,7 +335,7 @@ describe('App', () => {
             document.getElementById('configPathInput').value = 'C:\\Missing';
             App.setupEventListeners();
             document.getElementById('saveSettings').click();
-            await new Promise(r => setTimeout(r, 20));
+            await flushAsync();
             expect(UIManager.showToast).toHaveBeenCalledWith(expect.stringMatching(/failed/i), 'alert-triangle');
         });
     });
