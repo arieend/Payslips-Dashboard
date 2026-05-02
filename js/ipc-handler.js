@@ -6,9 +6,11 @@
 
 const IPCHandler = {
   isEnabled: !!window.electron,
+  _initialized: false,
 
   init() {
-    if (!this.isEnabled) return;
+    if (!this.isEnabled || this._initialized) return;
+    this._initialized = true;
 
     window.electron.onIngestStatus((event, data) => {
       this.updateStatusUI(data.status, data.message);

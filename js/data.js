@@ -106,10 +106,11 @@ const DataManager = {
         const insights = [];
         if (yearData.length === 0) return insights;
 
-        const totals = this.getTotals(yearData);
-
-        // 1. Threshold-based Anomalies
-        const avgGross = totals.gross / yearData.length;
+        // 1. Threshold-based Anomalies — compute average only over months with real data
+        const validData = yearData.filter(d => d.gross > 0 || d.net > 0);
+        const avgGross = validData.length > 0
+            ? validData.reduce((s, d) => s + d.gross, 0) / validData.length
+            : 0;
         yearData.forEach(d => {
             if (d.gross > avgGross * 1.3) {
                 insights.push({

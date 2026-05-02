@@ -30,21 +30,24 @@ const ChartManager = {
             this.charts.salary.data.datasets[2].data = deductionsData;
             this.charts.salary.update('none');
         } else {
-            this._createMainSalaryChart(document.getElementById('mainSalaryChart').getContext('2d'), yearData);
+            const salaryCanvas = document.getElementById('mainSalaryChart');
+            if (salaryCanvas) this._createMainSalaryChart(salaryCanvas.getContext('2d'), yearData);
         }
 
         if (this.charts.earnings) {
             this.charts.earnings.data.datasets[0].data = [totals.base, totals.bonus, totals.overtime];
             this.charts.earnings.update('none');
         } else {
-            this._createEarningsPie(document.getElementById('earningsPie').getContext('2d'), totals);
+            const earningsCanvas = document.getElementById('earningsPie');
+            if (earningsCanvas) this._createEarningsPie(earningsCanvas.getContext('2d'), totals);
         }
 
         if (this.charts.deductions) {
             this.charts.deductions.data.datasets[0].data = [totals.tax, totals.pension, totals.insurance];
             this.charts.deductions.update('none');
         } else {
-            this._createDeductionsPie(document.getElementById('deductionsPie').getContext('2d'), totals);
+            const deductionsCanvas = document.getElementById('deductionsPie');
+            if (deductionsCanvas) this._createDeductionsPie(deductionsCanvas.getContext('2d'), totals);
         }
     },
 

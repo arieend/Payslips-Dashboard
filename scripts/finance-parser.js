@@ -22,7 +22,7 @@ function getFinanceRegex(kw) {
 
 function findValueInLine(keywords, line, options = {}) {
     for (const kw of keywords) {
-        if (options.excludeBasis && (line.includes('åèåøá') || line.includes('øáèöî') || line.includes('Basis') || line.includes('Cumulative'))) {
+        if (options.excludeBasis && (line.includes('Basis') || line.includes('Cumulative'))) {
             continue;
         }
         const regexes = getFinanceRegex(kw);

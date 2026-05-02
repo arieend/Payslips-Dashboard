@@ -156,7 +156,7 @@ async function setupWatcher() {
       if (isIngesting) return;
       console.log(`[Watcher] ${type} detected: ${p}`);
       clearTimeout(timer);
-      timer = setTimeout(runIngestion, 3000); // 3s settle
+      timer = setTimeout(() => runIngestion().catch(err => console.error('[Watcher] Triggered ingestion error:', err)), 3000); // 3s settle
     };
 
     watcher.on('add', (p) => trigger('Add', p));
@@ -184,18 +184,34 @@ ipcMain.handle('select-folder', async () => {
 });
 
 ipcMain.handle('manual-sync', async () => {
-  await runIngestion();
-  return { success: true };
+  try {
+    await runIngestion();
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('sync-year', async (event, year) => {
-  await runIngestion({ forceYear: year.toString() });
-  return { success: true };
+  if (!/^\d{4}$/.test(String(year))) return { success: false, error: 'Invalid year' };
+  try {
+    await runIngestion({ forceYear: year.toString() });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('sync-month', async (event, { year, month }) => {
-  await runIngestion({ forceYear: year.toString(), forceMonth: month });
-  return { success: true };
+  if (!/^\d{4}$/.test(String(year)) || !/^\d{2}$/.test(String(month))) {
+    return { success: false, error: 'Invalid params' };
+  }
+  try {
+    await runIngestion({ forceYear: year.toString(), forceMonth: month });
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: e.message };
+  }
 });
 
 ipcMain.handle('update-path', async (event, newPath) => {
@@ -250,7 +266,11 @@ ipcMain.handle('save-manual-edit', async (event, { month, updates }) => {
     if (!yearData) return { success: false, error: 'Year not found' };
     const entry = yearData.find(m => m.month === month);
     if (!entry) return { success: false, error: 'Month not found' };
-    Object.assign(entry, updates);
+    const ALLOWED_EDIT_KEYS = ['gross', 'net', 'total_deductions', 'deductions', 'earnings'];
+    const safeUpdates = Object.fromEntries(
+      Object.entries(updates).filter(([k]) => ALLOWED_EDIT_KEYS.includes(k))
+    );
+    Object.assign(entry, safeUpdates);
     await writePayslipData(data, paths.data);
     if (mainWindow) mainWindow.webContents.send('data-updated');
     return { success: true };
@@ -261,9 +281,6 @@ ipcMain.handle('save-manual-edit', async (event, { month, updates }) => {
 
 // App Lifecycle
 app.whenReady().then(async () => {
-  // Remove default menu
-  Menu.setApplicationMenu(null);
-
   // Modern protocol handler
   protocol.handle('app-data', (request) => {
     try {
@@ -291,7 +308,8 @@ app.whenReady().then(async () => {
   if (await fs.pathExists(paths.config)) {
     try {
       const config = await readConfig();
-      if (config.parentDirectoryPath && config.parentDirectoryPath.length > 5) {
+      const p = config.parentDirectoryPath;
+      if (p && typeof p === 'string' && p.trim().length > 0) {
          console.log('[Main] Valid config found. Initializing background sync...');
          runIngestion().catch(err => console.error('[Main] Startup ingestion error:', err));
       } else {

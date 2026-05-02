@@ -10,19 +10,21 @@ const { extractDataFromText } = require('./finance-parser');
 
 const CONFIG_FILENAME = `${productName}.yaml`;
 
-async function getAllFiles(dirPath) {
+async function getAllFiles(dirPath, depth = 0) {
+    if (depth > 4) return [];
     const files = await fs.readdir(dirPath);
     const entries = await Promise.all(
         files.map(async file => {
             const fullPath = path.join(dirPath, file);
-            const stat = await fs.stat(fullPath);
-            return { fullPath, isDir: stat.isDirectory() };
+            const stat = await fs.lstat(fullPath); // lstat does not follow symlinks
+            return { fullPath, isDir: stat.isDirectory(), isSymlink: stat.isSymbolicLink() };
         })
     );
     const results = [];
-    for (const { fullPath, isDir } of entries) {
+    for (const { fullPath, isDir, isSymlink } of entries) {
+        if (isSymlink) continue; // skip to avoid infinite loops
         if (isDir) {
-            results.push(...await getAllFiles(fullPath));
+            results.push(...await getAllFiles(fullPath, depth + 1));
         } else {
             results.push(fullPath);
         }
@@ -228,7 +230,14 @@ async function exportConfig(parentPath) {
     const configPath = path.join(__dirname, '..', CONFIG_FILENAME);
     const dataPath = path.join(__dirname, '..', 'data');
     const config = { parentDirectoryPath: parentPath };
-    await fs.writeFile(configPath, yaml.dump(config));
+    const tempPath = configPath + '.tmp';
+    try {
+        await fs.writeFile(tempPath, yaml.dump(config));
+        await fs.move(tempPath, configPath, { overwrite: true });
+    } catch (e) {
+        await fs.remove(tempPath).catch(() => {});
+        throw e;
+    }
     await fs.writeFile(path.join(dataPath, 'config.js'), `window.APP_CONFIG = ${JSON.stringify(config, null, 2)};`);
 }
 
@@ -248,4 +257,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { ingest, extractDataFromText, exportConfig };
+module.exports = { ingest, exportConfig };

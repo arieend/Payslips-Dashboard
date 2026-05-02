@@ -101,7 +101,9 @@ app.post('/api/config', async (req, res) => {
     const { parentDirectoryPath } = req.body;
     console.log('[Server] Updating config to:', parentDirectoryPath);
     try {
-        await fs.writeFile(CONFIG_PATH, yaml.dump({ parentDirectoryPath }));
+        const tmpConfigPath = CONFIG_PATH + '.tmp';
+        await fs.writeFile(tmpConfigPath, yaml.dump({ parentDirectoryPath }));
+        await fs.move(tmpConfigPath, CONFIG_PATH, { overwrite: true });
         invalidateConfig();
 
         // Re-setup the proxy on the fly
@@ -139,7 +141,11 @@ app.post('/api/manual-edit', async (req, res) => {
         if (!yearData) return res.status(404).json({ success: false, error: 'Year not found' });
         const entry = yearData.find(m => m.month === month);
         if (!entry) return res.status(404).json({ success: false, error: 'Month not found' });
-        Object.assign(entry, updates);
+        const ALLOWED_EDIT_KEYS = ['gross', 'net', 'total_deductions', 'deductions', 'earnings'];
+        const safeUpdates = Object.fromEntries(
+            Object.entries(updates).filter(([k]) => ALLOWED_EDIT_KEYS.includes(k))
+        );
+        Object.assign(entry, safeUpdates);
         await writePayslipData(data, path.join(__dirname, 'data'));
         res.json({ success: true });
     } catch (e) {
@@ -151,7 +157,7 @@ app.post('/api/manual-edit', async (req, res) => {
 app.get('/api/source-file', async (req, res) => {
     try {
         const filePath = req.query.path;
-        if (!filePath) return res.status(400).end();
+        if (!filePath || typeof filePath !== 'string') return res.status(400).end();
         const config = await readConfig();
         const sourceDir = config.parentDirectoryPath;
         if (!sourceDir) return res.status(403).end();

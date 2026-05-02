@@ -1,7 +1,11 @@
 const UIManager = {
     _cache: {},
     getEl(id) {
-        if (!this._cache[id]) this._cache[id] = document.getElementById(id);
+        if (!this._cache[id]) {
+            const el = document.getElementById(id);
+            if (el) this._cache[id] = el;
+            return el;
+        }
         return this._cache[id];
     },
     _clearCache() {
@@ -10,6 +14,9 @@ const UIManager = {
     // Translate a key via I18n if available, else return fallback
     _t(key, fallback) {
         return typeof I18n !== 'undefined' ? I18n.t(key) : fallback;
+    },
+    _escHtml(str) {
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     },
     // Set the .kpi-value text inside a KPI card by its CSS selector
     _setKPI(selector, val) {
@@ -100,13 +107,14 @@ const UIManager = {
             card.className = 'month-card' + (isFailed ? ' parse-failed' : '');
             const i = typeof I18n !== 'undefined' ? I18n : null;
             const fmtMonth = this._formatMonth(month.month);
+            const eFmt = this._escHtml(fmtMonth);
             card.innerHTML = `
                 <div class="card-title">
                     <i data-lucide="calendar"></i>
-                    ${fmtMonth}
+                    ${eFmt}
                     <div style="margin-left:auto; display:flex; gap:0.25rem;">
-                        <button class="card-edit-btn" title="${i ? i.t('editMonth', { month: fmtMonth }) : `Edit ${fmtMonth} data`}"><i data-lucide="pencil"></i></button>
-                        <button class="card-refresh-btn" title="${i ? i.t('reingestMonth', { month: fmtMonth }) : `Re-ingest ${fmtMonth}`}"><i data-lucide="refresh-cw"></i></button>
+                        <button class="card-edit-btn" title="${i ? i.t('editMonth', { month: eFmt }) : `Edit ${eFmt} data`}"><i data-lucide="pencil"></i></button>
+                        <button class="card-refresh-btn" title="${i ? i.t('reingestMonth', { month: eFmt }) : `Re-ingest ${eFmt}`}"><i data-lucide="refresh-cw"></i></button>
                     </div>
                 </div>
                 <div class="card-stat"><span>${i ? i.t('gross') : 'Gross'}:</span> <b>₪${month.gross.toLocaleString()}</b></div>
@@ -185,7 +193,7 @@ const UIManager = {
                          ${isPdf ? `<button id="toggleRaw" style="font-size:0.7rem; background:none; border:1px solid var(--border); padding:2px 8px; border-radius:4px; cursor:pointer;">${typeof I18n !== 'undefined' ? I18n.t('showRawText') : 'Show Raw Text'}</button>` : ''}
                     </div>
                     <div id="pdfViewerFrame" style="flex:1; border:1px solid var(--border); border-radius:0.5rem; overflow:hidden; background:#525659; display:${isPdf ? 'block' : 'none'};">
-                        <iframe src="${pdfUrl || 'about:blank'}" width="100%" height="100%" frameborder="0"></iframe>
+                        <iframe src="about:blank" width="100%" height="100%" frameborder="0"></iframe>
                     </div>
                     <pre class="raw-content" id="rawContentArea" style="flex:1; margin:0; display:${isPdf ? 'none' : 'block'};"></pre>
                 </div>
@@ -199,6 +207,8 @@ const UIManager = {
         body.querySelector('#modalSourceFile').textContent = monthData.source_file?.split(/[\\\/]/).pop() ?? 'Unknown file';
         
         if (pdfUrl) {
+            const frame = body.querySelector('#pdfViewerFrame iframe');
+            if (frame) frame.src = pdfUrl;
             body.querySelector('#downloadLink').href = pdfUrl;
         } else if (window.electron && isPdf && monthData.source_file) {
             // Electron: load PDF bytes via IPC and create a blob URL for the iframe
@@ -508,11 +518,21 @@ const UIManager = {
                     <i data-lucide="folder-search" style="width: 3rem; height: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>
                     <h3 style="margin-bottom: 0.5rem;">${i18 ? i18.t('noDataFound') : 'No Data Found'}</h3>
                     <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">${i18 ? i18.t('noDataHint') : 'Select the folder containing your PDF payslips to get started.'}</p>
-                    <button class="action-btn" onclick="window.IPCHandler && window.IPCHandler.isEnabled ? window.IPCHandler.selectFolder() : UIManager.openSettings()">
+                    <button class="action-btn" id="_welcomeSelectBtn">
                         <i data-lucide="folder-plus"></i> ${i18 ? i18.t('selectFolder') : 'Select Folder'}
                     </button>
                 </div>
             `;
+            const welcomeBtn = grid.querySelector('#_welcomeSelectBtn');
+            if (welcomeBtn) {
+                welcomeBtn.addEventListener('click', () => {
+                    if (window.IPCHandler && window.IPCHandler.isEnabled) {
+                        window.IPCHandler.selectFolder();
+                    } else {
+                        UIManager.openSettings();
+                    }
+                });
+            }
             this.refreshIcons();
         }
     }

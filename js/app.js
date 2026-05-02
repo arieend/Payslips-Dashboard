@@ -3,6 +3,14 @@ const App = {
     allYears: [],
     _selectedComponent: 'all',
 
+    _t(key, fallback, data) {
+        if (typeof I18n === 'undefined') return fallback;
+        return data !== undefined ? I18n.t(key, data) : I18n.t(key);
+    },
+    _isHe() {
+        return typeof I18n !== 'undefined' && I18n.lang === 'he';
+    },
+
     async init() {
         console.log('Initializing Payslip Infographic App...');
         await this.loadData();
@@ -34,7 +42,7 @@ const App = {
                         if (!window.electron) this._subscribeToIngestProgress();
                     } catch (e) {
                         console.error('[App] Sync failed:', e);
-                        UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastSyncFailed') : 'Sync failed: ') + e.message, 'alert-triangle');
+                        UIManager.showToast(this._t('toastSyncFailed', 'Sync failed: ') + e.message, 'alert-triangle');
                     }
                 } else {
                     console.error('IPC Handler not found');
@@ -66,7 +74,7 @@ const App = {
                 const opt = document.createElement('option');
                 opt.value = (idx + 1).toString().padStart(2, '0');
                 const d = new Date(2000, idx, 1);
-                const locale = typeof I18n !== 'undefined' && I18n.lang === 'he' ? 'he-IL' : 'default';
+                const locale = this._isHe() ? 'he-IL' : 'default';
                 opt.textContent = d.toLocaleString(locale, { month: 'long' });
                 monthFilter.appendChild(opt);
             });
@@ -83,7 +91,7 @@ const App = {
             components.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.value;
-                opt.textContent = typeof I18n !== 'undefined' ? I18n.t(c.key) : c.fallback;
+                opt.textContent = this._t(c.key, c.fallback);
                 componentFilter.appendChild(opt);
             });
             componentFilter.addEventListener('change', () => {
@@ -98,7 +106,7 @@ const App = {
                 const selectedVal = monthFilter.value;
                 Array.from(monthFilter.options).slice(1).forEach((opt, idx) => {
                     const d = new Date(2000, idx, 1);
-                    const locale = typeof I18n !== 'undefined' && I18n.lang === 'he' ? 'he-IL' : 'default';
+                    const locale = this._isHe() ? 'he-IL' : 'default';
                     opt.textContent = d.toLocaleString(locale, { month: 'long' });
                 });
                 monthFilter.value = selectedVal;
@@ -124,24 +132,23 @@ const App = {
                 const input = document.getElementById('configPathInput');
                 const newPath = input.value.trim();
 
-                const _i = typeof I18n !== 'undefined' ? I18n : null;
                 if (!newPath) {
-                    UIManager.showToast(_i ? _i.t('toastPathEmpty') : 'Path cannot be empty!', 'alert-triangle');
+                    UIManager.showToast(this._t('toastPathEmpty', 'Path cannot be empty!'), 'alert-triangle');
                     return;
                 }
                 if (!/^([A-Za-z]:[\\\/]|\\\\|\/)/i.test(newPath)) {
-                    UIManager.showToast(_i ? _i.t('toastPathAbsolute') : 'Please provide an absolute path (e.g. C:\\Payslips)', 'alert-triangle');
+                    UIManager.showToast(this._t('toastPathAbsolute', 'Please provide an absolute path (e.g. C:\\Payslips)'), 'alert-triangle');
                     return;
                 }
 
                 const originalText = saveSettingsBtn.textContent;
                 saveSettingsBtn.disabled = true;
-                saveSettingsBtn.textContent = _i ? _i.t('toastPathUpdating') : 'Updating...';
+                saveSettingsBtn.textContent = this._t('toastPathUpdating', 'Updating...');
 
                 try {
                     await window.IPCHandler.updatePath(newPath);
                     const toastKey = window.electron ? 'toastPathUpdated' : 'toastPathUpdatedBrowser';
-                    UIManager.showToast(_i ? _i.t(toastKey) : 'Folder path updated!', 'check-circle');
+                    UIManager.showToast(this._t(toastKey, 'Folder path updated!'), 'check-circle');
                     if (!window.APP_CONFIG) window.APP_CONFIG = {};
                     window.APP_CONFIG.parentDirectoryPath = newPath;
                     if (!window.electron) {
@@ -151,7 +158,7 @@ const App = {
                     UIManager.closeSettings();
                 } catch (e) {
                     console.error('[App] Config update error:', e);
-                    UIManager.showToast(_i ? _i.t('toastPathError') : 'Failed to update folder path. Please check if the path exists.', 'alert-triangle');
+                    UIManager.showToast(this._t('toastPathError', 'Failed to update folder path. Please check if the path exists.'), 'alert-triangle');
                 } finally {
                     saveSettingsBtn.disabled = false;
                     saveSettingsBtn.textContent = originalText;
@@ -171,7 +178,7 @@ const App = {
 
     _renderSummary() {
         UIManager.toggleView(true);
-        document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined' ? I18n.t('lifetimeSummary') : 'Lifetime Payslip Summary';
+        document.getElementById('mainTitle').innerHTML = this._t('lifetimeSummary', 'Lifetime Payslip Summary');
         const summary = DataManager.getAllYearsSummary();
         const lifetime = DataManager.getLifetimeTotals();
         UIManager.renderAllYearsDashboard(summary, lifetime,
@@ -189,21 +196,19 @@ const App = {
     _renderYear(year) {
         UIManager.toggleView(false);
         const safeYear = this._escHtml(year);
-        document.getElementById('mainTitle').innerHTML = typeof I18n !== 'undefined'
-            ? I18n.t('payslipOverview', { year: `<span>${safeYear}</span>` })
-            : `<span>${safeYear}</span> Payslip Overview`;
+        document.getElementById('mainTitle').innerHTML = this._t('payslipOverview', `<span>${safeYear}</span> Payslip Overview`, { year: `<span>${safeYear}</span>` });
 
-        const monthFilterVal = document.getElementById('monthFilter').value;
+        const monthFilterVal = document.getElementById('monthFilter')?.value ?? 'all';
         const filteredData = this._getFilteredData(monthFilterVal);
         if (!filteredData || filteredData.length === 0) {
-            UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastNoData') : 'No data available for ') + year, 'alert-circle');
+            UIManager.showToast(this._t('toastNoData', 'No data available for ') + year, 'alert-circle');
             return;
         }
 
         const totals = DataManager.getTotals(filteredData);
         const averages = DataManager.getAverages(filteredData);
         const insights = DataManager.getInsights(filteredData, year);
-        const trends = DataManager.getTrendAnalysis(DataManager.getDataForYear(year));
+        const trends = DataManager.getTrendAnalysis(filteredData);
 
         UIManager.updateKPIs(totals, averages);
         UIManager.updateTrendAnalysis(trends);
@@ -215,7 +220,7 @@ const App = {
             },
             async (monthKey, updates) => {
                 await window.IPCHandler.saveManualEdit(monthKey, updates);
-                UIManager.showToast(typeof I18n !== 'undefined' ? I18n.t('toastSaveOk') : 'Data saved successfully!', 'check-circle');
+                UIManager.showToast(this._t('toastSaveOk', 'Data saved successfully!'), 'check-circle');
                 await this.loadData();
             }
         );
@@ -233,9 +238,9 @@ const App = {
         }
         if (this._selectedComponent !== 'all' && ChartManager.charts.salary) {
             const labelMap = {
-                'gross': typeof I18n !== 'undefined' ? I18n.t('chartGross') : 'Gross Salary',
-                'net': typeof I18n !== 'undefined' ? I18n.t('chartNet') : 'Net Salary',
-                'deductions': typeof I18n !== 'undefined' ? I18n.t('chartDeductions') : 'Deductions'
+                'gross': this._t('chartGross', 'Gross Salary'),
+                'net': this._t('chartNet', 'Net Salary'),
+                'deductions': this._t('chartDeductions', 'Deductions')
             };
             const selectedLabel = labelMap[this._selectedComponent];
             ChartManager.charts.salary.data.datasets.forEach(ds => {
@@ -302,7 +307,7 @@ const App = {
             await syncFn();
         } catch (e) {
             done();
-            UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastRefreshFailed') : 'Refresh failed: ') + e.message, 'alert-triangle');
+            UIManager.showToast(this._t('toastRefreshFailed', 'Refresh failed: ') + e.message, 'alert-triangle');
             return;
         }
         if (window.electron) done();
@@ -319,7 +324,7 @@ const App = {
 
         if (wrap) wrap.classList.remove('hidden');
         if (fill) fill.style.width = '0%';
-        if (label) label.textContent = typeof I18n !== 'undefined' ? I18n.t('progressStarting') : 'Starting…';
+        if (label) label.textContent = this._t('progressStarting', 'Starting…');
 
         const es = new EventSource('/api/ingest-progress');
         this._sseSource = es;
@@ -331,7 +336,7 @@ const App = {
             if (data.type === 'done') {
                 es.close(); this._sseSource = null;
                 if (wrap) wrap.classList.add('hidden');
-                UIManager.showToast(typeof I18n !== 'undefined' ? I18n.t('toastIngestComplete', { count: data.count }) : `Ingestion complete — ${data.count} payslips`, 'check-circle', 5000);
+                UIManager.showToast(this._t('toastIngestComplete', `Ingestion complete — ${data.count} payslips`, { count: data.count }), 'check-circle', 5000);
                 this.loadData();
                 if (onDone) onDone();
                 return;
@@ -339,7 +344,7 @@ const App = {
             if (data.type === 'error') {
                 es.close(); this._sseSource = null;
                 if (wrap) wrap.classList.add('hidden');
-                UIManager.showToast((typeof I18n !== 'undefined' ? I18n.t('toastIngestError') : 'Ingestion error: ') + data.error, 'alert-triangle', 8000);
+                UIManager.showToast(this._t('toastIngestError', 'Ingestion error: ') + data.error, 'alert-triangle', 8000);
                 if (onDone) onDone();
                 return;
             }
@@ -355,7 +360,7 @@ const App = {
                 const tag = data.cached ? ' (cached)' : ' ✓';
                 label.textContent = `${monthName}${grossStr}${tag}   (${data.current} / ${data.total})`;
             } else if (label) {
-                label.textContent = `${typeof I18n !== 'undefined' ? I18n.t('progressProcessing') : 'Processing…'}  (${data.current} / ${data.total})`;
+                label.textContent = `${this._t('progressProcessing', 'Processing…')}  (${data.current} / ${data.total})`;
             }
         };
 
