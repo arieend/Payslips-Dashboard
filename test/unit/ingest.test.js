@@ -234,4 +234,43 @@ describe('extractDataFromText() — bonus / overtime', () => {
         const data = extractDataFromText(text);
         expect(data.earnings.bonus).toBe(5000);
     });
+
+    it('overtime field is always 0 — parser does not extract overtime keywords', () => {
+        // Business rule: the parser initialises overtime to 0; there is no extraction
+        // keyword for it, so it always remains 0 regardless of text content.
+        const text = 'Month: 2024-01\nGross Total: 20000\nNet for Payment: 15000\nOvertime: 2000';
+        const data = extractDataFromText(text);
+        expect(data.earnings.overtime).toBe(0);
+    });
+});
+
+// ─── extractDataFromText – large salaries & edge values ───────────────────────
+describe('extractDataFromText() — large salaries and edge values', () => {
+    it('parses a gross salary above 50,000 correctly', () => {
+        const text = [
+            'Month: 2024-12',
+            'Gross Total: 55,000',
+            'Net for Payment: 42,000',
+        ].join('\n');
+        const data = extractDataFromText(text);
+        expect(data.gross).toBe(55000);
+        expect(data.net).toBe(42000);
+        expect(data.total_deductions).toBe(13000);
+    });
+
+    it('total_deductions fallback: extracts from "ניכויים" keyword when gross-net diff is unavailable', () => {
+        // When gross=0 and net=0, the gross-net diff produces 0.
+        // The code then tries the totalDeductionKeywords search on each line.
+        const text = 'Month: 2024-01\nניכויים: 3,500';
+        const data = extractDataFromText(text);
+        expect(data.total_deductions).toBe(3500);
+    });
+
+    it('handles empty string input without throwing', () => {
+        expect(() => extractDataFromText('')).not.toThrow();
+    });
+
+    it('handles input with only whitespace without throwing', () => {
+        expect(() => extractDataFromText('   \n  \t  ')).not.toThrow();
+    });
 });

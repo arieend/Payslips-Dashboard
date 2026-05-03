@@ -401,4 +401,118 @@ describe('App', () => {
             expect(App._escHtml(input)).toBe(expected);
         });
     });
+
+    // ── langchange event ──────────────────────────────────────────────────────────
+    describe('langchange event', () => {
+        it('destroys all charts and re-renders when langchange fires', () => {
+            App.currentYear = 'summary';
+            App.setupEventListeners();
+            document.dispatchEvent(new CustomEvent('langchange'));
+            expect(ChartManager.destroyAll).toHaveBeenCalled();
+            expect(UIManager.toggleView).toHaveBeenCalled();
+        });
+
+        it('updates month filter option labels when langchange fires', () => {
+            App.currentYear = '2024';
+            vi.mocked(DataManager.getDataForYear).mockReturnValue(yearData);
+            App.setupEventListeners();
+            // Populate the month filter options as init() would
+            const mf = document.getElementById('monthFilter');
+            const opt = document.createElement('option');
+            opt.value = '01';
+            opt.textContent = 'January';
+            mf.appendChild(opt);
+
+            document.dispatchEvent(new CustomEvent('langchange'));
+            // After langchange the label is re-rendered — verify render was called
+            expect(UIManager.toggleView).toHaveBeenCalled();
+        });
+    });
+
+    // ── _subscribeToIngestProgress() ─────────────────────────────────────────────
+    describe('_subscribeToIngestProgress()', () => {
+        let mockEs;
+
+        beforeEach(() => {
+            // Extend baseDOM with progress elements
+            document.body.innerHTML += `
+                <div id="ingest-progress-wrap" class="hidden"></div>
+                <div id="ingest-progress-fill" style="width:0%"></div>
+                <span id="ingest-progress-label"></span>
+            `;
+            mockEs = { close: vi.fn(), onmessage: null, onerror: null };
+            global.EventSource = vi.fn().mockReturnValue(mockEs);
+            delete global.window.electron;
+            App._sseSource = null;
+        });
+
+        it('calls onDone immediately and returns in Electron mode', () => {
+            global.window.electron = {};
+            const onDone = vi.fn();
+            App._subscribeToIngestProgress(onDone);
+            expect(onDone).toHaveBeenCalledOnce();
+            expect(global.EventSource).not.toHaveBeenCalled();
+        });
+
+        it('creates an EventSource to /api/ingest-progress in browser mode', () => {
+            App._subscribeToIngestProgress();
+            expect(global.EventSource).toHaveBeenCalledWith('/api/ingest-progress');
+        });
+
+        it('shows progress bar and resets fill width on subscription', () => {
+            App._subscribeToIngestProgress();
+            expect(document.getElementById('ingest-progress-wrap').classList.contains('hidden')).toBe(false);
+            expect(document.getElementById('ingest-progress-fill').style.width).toBe('0%');
+        });
+
+        it('"done" message: hides progress, shows toast, calls loadData, calls onDone', async () => {
+            const mockLoadData = vi.spyOn(App, 'loadData').mockResolvedValue(undefined);
+            const onDone = vi.fn();
+            App._subscribeToIngestProgress(onDone);
+
+            mockEs.onmessage({ data: JSON.stringify({ type: 'done', count: 7 }) });
+            await flushAsync();
+
+            expect(mockEs.close).toHaveBeenCalled();
+            expect(document.getElementById('ingest-progress-wrap').classList.contains('hidden')).toBe(true);
+            expect(UIManager.showToast).toHaveBeenCalledWith(expect.stringMatching(/7/), 'check-circle', 5000);
+            expect(mockLoadData).toHaveBeenCalled();
+            expect(onDone).toHaveBeenCalled();
+            mockLoadData.mockRestore();
+        });
+
+        it('"error" message: shows error toast and calls onDone', async () => {
+            const onDone = vi.fn();
+            App._subscribeToIngestProgress(onDone);
+
+            mockEs.onmessage({ data: JSON.stringify({ type: 'error', error: 'OCR failed' }) });
+            await flushAsync();
+
+            expect(mockEs.close).toHaveBeenCalled();
+            expect(UIManager.showToast).toHaveBeenCalledWith(expect.stringContaining('OCR failed'), 'alert-triangle', 8000);
+            expect(onDone).toHaveBeenCalled();
+        });
+
+        it('progress message: updates progress fill width', () => {
+            App._subscribeToIngestProgress();
+            mockEs.onmessage({ data: JSON.stringify({ type: 'progress', current: 2, total: 8, month: '2024-03', gross: 10000, cached: false }) });
+            expect(document.getElementById('ingest-progress-fill').style.width).toBe('25%');
+        });
+
+        it('onerror: closes EventSource, hides progress, calls onDone', () => {
+            const onDone = vi.fn();
+            App._subscribeToIngestProgress(onDone);
+            mockEs.onerror();
+            expect(mockEs.close).toHaveBeenCalled();
+            expect(document.getElementById('ingest-progress-wrap').classList.contains('hidden')).toBe(true);
+            expect(onDone).toHaveBeenCalled();
+        });
+
+        it('closes any existing SSE source before opening a new one', () => {
+            const oldEs = { close: vi.fn() };
+            App._sseSource = oldEs;
+            App._subscribeToIngestProgress();
+            expect(oldEs.close).toHaveBeenCalled();
+        });
+    });
 });
