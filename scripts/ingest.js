@@ -257,4 +257,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { ingest, exportConfig };
+module.exports = { ingest, exportConfig, isFileForced };

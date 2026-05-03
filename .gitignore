@@ -20,6 +20,12 @@ coverage/
 .claude/
 .playwright-mcp/
 
+# Graphify
+graphify-out/
+.graphify_*.json
+.graphify_*.txt
+.graphify_*.py
+
 # IDEs and Editors
 .vscode/
 .idea/

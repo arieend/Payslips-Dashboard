@@ -189,8 +189,12 @@ try {
     _configCache = {};
 }
 
-app.listen(PORT, () => {
-    console.log(`\n🚀 Payslip Dashboard running at http://localhost:${PORT}`);
-    console.log(`📡 Ingestion API: http://localhost:${PORT}/api/ingest`);
-    console.log('Press Ctrl+C to stop.\n');
-});
+if (require.main === module) {
+    app.listen(PORT, () => {
+        console.log(`\n🚀 Payslip Dashboard running at http://localhost:${PORT}`);
+        console.log(`📡 Ingestion API: http://localhost:${PORT}/api/ingest`);
+        console.log('Press Ctrl+C to stop.\n');
+    });
+}
+
+module.exports = { app, readConfig, invalidateConfig, broadcastProgress };
